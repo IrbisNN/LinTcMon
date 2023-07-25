@@ -3,8 +3,6 @@ import socket
 from acsespec import *
 from rose import *
 from pyasn1.codec.ber import encoder,decoder
-import cstautils
-import settings
 import codecs
 from datetime import datetime
 
@@ -104,7 +102,7 @@ class PhoneSystem:
       o.setComponentByName('invokeid',self.NextID())
       o.setComponentByName('opcode',19)
       arg = ArgumentSeq()
-      arg.setComponentByPosition(0,cstautils.toConnectionID(connectionid))
+      #arg.setComponentByPosition(0,cstautils.toConnectionID(connectionid))
       arg.setComponentByPosition(1,char.IA5String(charactersToSend))
       o.setComponentByName('args',arg)
       self.sendMess(o)
@@ -121,7 +119,7 @@ class PhoneSystem:
     for key,val in self.calls.items():
       if val["callstate"] == "Delivered":
         if time.time()-val["started"] > 5 * 60:
-          cstautils.writelog(self,0,key)
+          #cstautils.writelog(self,0,key)
           del self.calls[key]
 
   def chekMakeCall(self):
