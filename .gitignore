@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+settings_local.py
+
+# virtualenv
+env
+venv
+.venv
+
+# vim swap files
+*.swp
+
+# ctags
+tags
+
+# ide folder
+.idea
+.DS_Store
+.vscode
