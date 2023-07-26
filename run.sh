@@ -1,4 +1,4 @@
-!/usr/bin/env bash
+#!/usr/bin/env bash
 
 BASEDIR=$(dirname "$0")
 echo "Executing App in '$BASEDIR'"
