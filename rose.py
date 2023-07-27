@@ -729,6 +729,12 @@ class MonitorStartArgument(univ.Sequence):
     namedtype.OptionalNamedType('requestedMonitorFilter',MonitorFilter())
     )
 
+class MakeCallArgument(univ.Sequence):
+  componentType = namedtype.NamedTypes(
+    namedtype.OptionalNamedType('callingDevice',DeviceID()),
+    namedtype.OptionalNamedType('calledDirectoryNumber',DeviceID())
+    )
+  
 class EscapeArgument(univ.Sequence):
   componentType = namedtype.NamedTypes(
     namedtype.OptionalNamedType('EscapeRegisterID',EscapeRegisterID()),
@@ -792,6 +798,11 @@ def argumentseq(op=-1):
       namedtype.OptionalNamedType('moniterObject',MonitorObject()),
       namedtype.OptionalNamedType('requestedMonitorFilter',MonitorFilter()),
       )
+  elif(op==10):
+    jack=namedtype.NamedTypes(
+      namedtype.OptionalNamedType('callingDevice',DeviceID()),
+      namedtype.OptionalNamedType('calledDirectoryNumber',DeviceID()),
+      )
 
   return univ.SequenceOf(componentType=univ.Choice(componentType=jack))
 
@@ -851,6 +862,8 @@ class ErrorArgs(univ.Choice):
 def args(op=-1):
   if(op==71):
     ret = MonitorStartArgument()
+  elif(op==10):
+    ret = MakeCallArgument()
   else:
     ret = univ.Choice(componentType=namedtype.NamedTypes(
       namedtype.OptionalNamedType("null",univ.Null()),

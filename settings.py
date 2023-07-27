@@ -10,3 +10,4 @@ DB_USER = environ.get("DB_USER", "C1Owner")
 DB_PWD = environ.get("DB_PWD", "renwO1C")
 
 NUMBER_PREF = environ.get("NUMBER_PREF", "52")
+PREF_MAKECALL = environ.get("PREF_MAKECALL", "9")

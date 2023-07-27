@@ -2,9 +2,10 @@
 
 import select
 import time
+import asyncio
 import psycopg2
 import phonesystem
-from settings import ATS_ID, ATS_IP, ATS_PORT, DB_SERVER, DB_USER, DB_PWD, NUMBER_PREF
+from settings import ATS_ID, ATS_IP, ATS_PORT, DB_SERVER, DB_USER, DB_PWD, NUMBER_PREF, PREF_MAKECALL
 
 
 mydb = None
@@ -19,6 +20,7 @@ PORT = ATS_PORT
 so = phonesystem.PhoneSystem((HOST,PORT),mydb)
 so.atsID = ATS_ID
 so.numberPref = NUMBER_PREF
+so.prefMakeCalls = PREF_MAKECALL
 
 #so.send_direct_mess(b'602380020780A10706052B0C00815ABE14281206072B0C00821D8148A007A0050303000800')
 so.SendSec()

@@ -24,6 +24,9 @@ class PhoneSystem:
   atsID = ""
   numberPref = ""
   failedCauses = [3,13,65,14,29,15,16,69,33]
+  initialized = False
+  lastPing = time.time()
+  prefMakeCalls = ""
   """Blocked - 35
   Busy - 3
   Call Cancelled - 5
@@ -81,31 +84,29 @@ class PhoneSystem:
     o = invoke(10)
     o.setComponentByName('invokeid',self.NextID())
     o.setComponentByName('opcode',10)
-    arg = ArgumentSeq()
-    dev = DeviceID()
-    dev.setComponentByName('dialingNumber',calling)
-    arg.setComponentByPosition(0,dev)
-    phonenum = DeviceID()
-    phonenum.setComponentByName('dialingNumber',called)
-    temp = ExtendedDeviceID()
-    temp.setComponentByName('deviceIdentifier',phonenum)
-    call = CalledDeviceID()
-    call.setComponentByName('deviceIdentifier',temp)
-    arg.setComponentByPosition(1,call)
-    o.setComponentByName('args',arg)
+    deviceIdentifierCalling = DeviceIdentifier()
+    deviceIdentifierCalling.setComponentByName('dialingNumber', calling)
+    deviceIdentifierCalled = DeviceIdentifier()
+    deviceIdentifierCalled.setComponentByName('dialingNumber', called)
+    devCalling = DeviceID()
+    devCalling.setComponentByName('deviceIdentifier', deviceIdentifierCalling)
+    devCalled = DeviceID()
+    devCalled.setComponentByName('deviceIdentifier', deviceIdentifierCalled)
+    o['args']['callingDevice'] = devCalling
+    o['args']['calledDirectoryNumber'] = devCalled
     self.sendMess(o)
   
   def DTMF(self,connectionid,charactersToSend):
-      if type(connectionid) != type({}):
-        return
-      o = invoke(19)
-      o.setComponentByName('invokeid',self.NextID())
-      o.setComponentByName('opcode',19)
-      arg = ArgumentSeq()
-      #arg.setComponentByPosition(0,cstautils.toConnectionID(connectionid))
-      arg.setComponentByPosition(1,char.IA5String(charactersToSend))
-      o.setComponentByName('args',arg)
-      self.sendMess(o)
+    if type(connectionid) != type({}):
+      return
+    o = invoke(19)
+    o.setComponentByName('invokeid',self.NextID())
+    o.setComponentByName('opcode',19)
+    arg = ArgumentSeq()
+    #arg.setComponentByPosition(0,cstautils.toConnectionID(connectionid))
+    arg.setComponentByPosition(1,char.IA5String(charactersToSend))
+    o.setComponentByName('args',arg)
+    self.sendMess(o)
 
   def SendStatus(self):
     result = invoke(52)
@@ -123,10 +124,28 @@ class PhoneSystem:
           del self.calls[key]
 
   def chekMakeCall(self):
-    for key,val in self.calls.items():
-      if val["callstate"] == "Delivered":
-        if time.time()-val["started"] > 5 * 60:
-          del self.calls[key]
+    if self.initialized == False:
+      return
+    query = f"""SELECT ID, InnerNumber, PhoneNumber FROM "MakeCalls" WHERE "Date" >= NOW() - interval '2 minutes' and Done = false and ATSID = '{self.atsID}'"""
+    if self.mydb and query:
+      with self.mydb:
+        cur = self.mydb.cursor();
+        with cur:
+          cur.execute(query)
+          makeCalls = cur.fetchall()
+          for call in makeCalls:
+            ExtNumber = call[2].strip()
+            IntNumber = call[1].strip()
+            if len(ExtNumber) < 10:
+              ExtNumber = self.prefMakeCalls + ExtNumber
+            else:
+              ExtNumber = self.prefMakeCalls + "8" + ExtNumber
+            if len(IntNumber) == 4 and len(ExtNumber) > 6:
+              self.MakeCall(IntNumber, ExtNumber);
+            query = f"""UPDATE "MakeCalls" SET Done = true WHERE ID = {call[0]}"""
+            cur.execute(query)
+          self.mydb.commit()  
+
 
   def chekNumberStatus(self):
     for key,val in self.numbers.items():
@@ -229,6 +248,7 @@ class PhoneSystem:
           #self.send_direct_mess(b'A20B0201013006020200D30500')
           self.handleAARE(data)
         elif encode_hex(data)[0] != b'612f80020780a10706052b0c00815aa203020100a305a103020101be14281206072b0c00821d8148a007a0050303000800':
+          self.initialized = True
           try:
             decode = decoder.decode(data,asn1Spec=Rose())[0]
           except Exception as ex:
@@ -328,6 +348,22 @@ class PhoneSystem:
 
     return None
   
+  def getNumberDeviceID(self, component):
+    deviceID = component.getComponentByName("deviceID")
+    staticID = deviceID.getComponentByName("staticID")
+    deviceIdentifier = staticID.getComponentByName("deviceIdentifier")
+    if len(deviceIdentifier.components) > 0:
+      number = deviceIdentifier.getComponent()
+      if number.isSameTypeWith(DeviceIdentifier().getComponentByName("dialingNumber")) & number.isValue:
+        return number
+      elif number.isSameTypeWith(DeviceIdentifier().getComponentByName("deviceNumber")) & number.isValue:
+        if int(number) in self.numbers:
+          return self.numbers[int(number)]
+      elif number.isSameTypeWith(DeviceIdentifier().getComponentByName("other")) & number.isValue:
+        return number
+
+    return None
+  
   def updateCalls(self, cc, event, refID):
     print(event)
     print(refID)
@@ -339,6 +375,10 @@ class PhoneSystem:
     releasingNumber = ""
     initiatingNumber = ""
     networkCalledNumber = ""
+    primaryCallID = ""
+    secondaryCallID = ""
+    transferringNumber = ""
+    transferredToNumber = ""
     if event == 'Originated':
       print(cc)
       originatedConnection = cc.getComponentByName("originatedConnection")
@@ -371,6 +411,11 @@ class PhoneSystem:
       calledDevice = cc.getComponentByName("calledDevice")
       calledNumber = self.getNumber(calledDevice)
       print(calledNumber)
+      answeringDevice = cc.getComponentByName("answeringDevice")
+      answeringNumber = self.getNumber(answeringDevice)
+      print(answeringNumber)
+      if answeringNumber and answeringNumber != calledNumber:
+        calledNumber = answeringNumber
       associatedCalledDevice = cc.getComponentByName("associatedCalledDevice")
       associatedCalledNumber = self.getNumber(associatedCalledDevice)
       if associatedCalledNumber:
@@ -422,14 +467,60 @@ class PhoneSystem:
       networkCalledDevice = cc.getComponentByName("networkCalledDevice")
       networkCalledNumber = self.getNumber(networkCalledDevice)
       print(networkCalledNumber)
+    elif event == 'Transferred':
+      print(cc)  
+      primaryOldCall = cc.getComponentByName("primaryOldCall")
+      both = primaryOldCall.getComponentByName("both")
+      primaryCallID = both.getComponentByName("callID")
+      secondaryOldCall = cc.getComponentByName("secondaryOldCall")
+      both = secondaryOldCall.getComponentByName("both")
+      secondaryCallID = both.getComponentByName("callID")
+      if secondaryCallID.isValue == False:
+        secondaryCallID = ""
+
+      transferringDevice = cc.getComponentByName("transferringDevice")
+      transferringNumber = self.getNumber(transferringDevice)
+      print(transferringNumber)
+
+      transferredToDevice = cc.getComponentByName("transferredToDevice")
+      transferredToNumber = self.getNumber(transferredToDevice)
+      print(transferredToNumber)
+      calledNumber = transferredToNumber
+
+      transferredConnections = cc.getComponentByName("transferredConnections")
+      for transCon in transferredConnections:
+        newConnection = transCon.getComponentByName("newConnection")
+        both = newConnection.getComponentByName("both")
+        callID = both.getComponentByName("callID")
+        print(callID)
+        transferredNumber = self.getNumberDeviceID(both)
+        print(transferredNumber)
+        if str(transferredNumber) != str(transferredToNumber):
+          callingNumber = transferredNumber
 
     if bool(callID) and bool(callingNumber) and bool(calledNumber):
       self.addToDB(event=event,
                     callID=str(callID),
                     callingNumber=str(callingNumber),
                     calledNumber=str(calledNumber),
-                    associatedCalledNumber=str(associatedCalledNumber),
-                    associatedCallingDevice=str(associatedCallingDevice))
+                    primaryCallID=str(primaryCallID),
+                    secondaryCallID=str(secondaryCallID),
+                    transferringNumber=str(transferringNumber))
+
+    if bool(primaryCallID) and bool(transferringNumber) and bool(transferredToNumber):
+      self.addToDB(event='Failed',
+                    callID=str(primaryCallID),
+                    callingNumber=str(transferringNumber),
+                    calledNumber=str(transferredToNumber))
+
+    if bool(secondaryCallID) and bool(callingNumber) and bool(transferringNumber):
+      self.addToDB(event='Failed',
+                    callID=str(secondaryCallID),
+                    callingNumber=str(callingNumber),
+                    calledNumber=str(transferringNumber))
+
+    if (bool(primaryCallID) or bool(secondaryCallID)) and bool(transferringNumber):
+      self.changeState(transferringNumber, 0)
 
     if bool(callID) and bool(releasingNumber) and len(str(releasingNumber)) == 4:
       self.changeState(releasingNumber, 0)
@@ -438,7 +529,7 @@ class PhoneSystem:
       self.changeState(initiatingNumber, 1)
 
     if bool(callID) and bool(networkCalledNumber) and len(str(networkCalledNumber)) == 4:
-      self.changeState(initiatingNumber, 1)
+      self.changeState(networkCalledNumber, 1)
 
 
   def handleEvent(self, data):
@@ -496,11 +587,11 @@ class PhoneSystem:
     now = datetime.now()
     ID = self.atsID + kwargs["callID"] + now.strftime("%Y%m%d")
     origin = ''
-    if kwargs["callingNumber"] in self.numbers and kwargs["calledNumber"] in self.numbers:
+    if int(kwargs["callingNumber"]) in self.numbers.values() and int(kwargs["calledNumber"]) in self.numbers.values():
         origin = "Internal"
-    elif kwargs["callingNumber"] in self.numbers:
+    elif int(kwargs["callingNumber"]) in self.numbers.values():
       origin = "Outgoing"
-    elif kwargs["calledNumber"] in self.numbers:
+    elif int(kwargs["calledNumber"]) in self.numbers.values():
       origin = "Incomming"    
 
     print(ID)
@@ -519,9 +610,9 @@ class PhoneSystem:
                   WHERE  ID = '{kwargs["callID"]}' AND LastEvent > NOW() - interval '10 minutes';
                   ELSE
                   INSERT INTO "NCalls"(startdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
-                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '', 'Lin', '{self.atsID}', '{ID}', NOW());
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
                   END IF; END $do$"""
-    elif  kwargs["event"] == 'Established': 
+    elif  kwargs["event"] == 'Established':
       query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes')
                   THEN UPDATE "NCalls"
                   SET answerdate = NOW(),
@@ -536,7 +627,7 @@ class PhoneSystem:
                   WHERE  ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes';
                   ELSE
                   INSERT INTO "NCalls"(answerdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
-                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '', 'Lin', '{self.atsID}', '{ID}', NOW());
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
                   END IF; END $do$"""
     elif  kwargs["event"] == 'Failed': 
       query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '30 minutes')
@@ -552,8 +643,26 @@ class PhoneSystem:
                   WHERE  ID = '{ID}' AND LastEvent > NOW() - interval '30 minutes';
                   ELSE
                   INSERT INTO "NCalls"(DropDate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
-                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '', 'Lin', '{self.atsID}', '{ID}', NOW());
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
                   END IF; END $do$"""
+    elif  kwargs["event"] == 'Transferred':
+      query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes')
+                  THEN UPDATE "NCalls"
+                  SET answerdate = NOW(),
+                  startdate = NOW(),
+                  CallerID = '{kwargs["callingNumber"]}',
+                  CalledID = '{kwargs["calledNumber"]}',
+                  Origin = '{origin}',
+                  "Line" = 'TapiLin',
+                  CallID = '{ID}',
+                  Exterminate = '0',
+                  LastEvent = NOW()
+                  WHERE  ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes';
+                  ELSE
+                  INSERT INTO "NCalls"(answerdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
+                  END IF; END $do$"""
+
 
     if self.mydb and query:
       with self.mydb:
