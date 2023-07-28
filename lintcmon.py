@@ -10,6 +10,7 @@ from settings import ATS_ID, ATS_IP, ATS_PORT, DB_SERVER, DB_USER, DB_PWD, NUMBE
 
 mydb = None
 mydb = psycopg2.connect(database="TapiCalls", host=DB_SERVER, user=DB_USER, password=DB_PWD)
+mydb.autocommit = True
 if mydb:
   cur = mydb.cursor()
   cur.execute("commit;")

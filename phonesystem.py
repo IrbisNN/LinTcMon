@@ -144,7 +144,6 @@ class PhoneSystem:
               self.MakeCall(IntNumber, ExtNumber);
             query = f"""UPDATE "MakeCalls" SET Done = true WHERE ID = {call[0]}"""
             cur.execute(query)
-          self.mydb.commit()  
 
 
   def chekNumberStatus(self):
@@ -476,6 +475,7 @@ class PhoneSystem:
       both = secondaryOldCall.getComponentByName("both")
       secondaryCallID = both.getComponentByName("callID")
       if secondaryCallID.isValue == False:
+        return
         secondaryCallID = ""
 
       transferringDevice = cc.getComponentByName("transferringDevice")
@@ -497,6 +497,8 @@ class PhoneSystem:
         print(transferredNumber)
         if str(transferredNumber) != str(transferredToNumber):
           callingNumber = transferredNumber
+    elif event == 'Delivered':
+      print(cc) 
 
     if bool(callID) and bool(callingNumber) and bool(calledNumber):
       self.addToDB(event=event,
@@ -684,7 +686,6 @@ class PhoneSystem:
       cur = self.mydb.cursor();
       with cur:
         cur.execute(query)
-        self.mydb.commit()
 
   def addState(self, number, status=0):
     print(number, status)
@@ -703,4 +704,3 @@ class PhoneSystem:
       cur = self.mydb.cursor();
       with cur:
         cur.execute(query)
-        self.mydb.commit()
