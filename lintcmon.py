@@ -43,3 +43,4 @@ while socopen:
     so.chekMakeCall()
     #so.chekNumberStatus()
     so.resetTimeout()
+    so.updatePing()

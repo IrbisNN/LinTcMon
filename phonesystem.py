@@ -5,6 +5,7 @@ from rose import *
 from pyasn1.codec.ber import encoder,decoder
 import codecs
 from datetime import datetime
+import os
 
 encode_hex = codecs.getencoder("hex_codec")
 decode_hex = codecs.getdecoder("hex_codec")
@@ -12,7 +13,7 @@ decode_hex = codecs.getdecoder("hex_codec")
 class PhoneSystem:
   id = 0
   connect = None
-  hostname = ('192.168.8.15', 33333)
+  hostname = ('', 33333)
   last = time.time()
   outdebug = 0
   indebug = 0
@@ -27,22 +28,10 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  """Blocked - 35
-  Busy - 3
-  Call Cancelled - 5
-  Destination Not Obtainable - 13
-  Destination Out of Order - 65
-  Do Not Disturb - 14
-  Reorder Tone - 29
-  Incompatible Destination - 15
-  Invalid Account Code - 16
-  Invalid Number Format - 69
-  Network Signal - 46
-  Normal - 78
-  Resource Not Available - 40
-  Trunks Busy - 33 """
+  version = "2023-08-01_LinTcMon"
+  server = os.uname()[1]
 
-  def __init__(self,host=('192.168.8.15', 33333),db=None):
+  def __init__(self,host=('', 33333),db=None):
     self.hostname = host
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     self.startup(self.hostname)
@@ -117,11 +106,7 @@ class PhoneSystem:
     ret.setComponentByName('invoke',result)
     self.sendMess(ret)
     self.resetTimeout()
-    for key,val in self.calls.items():
-      if val["callstate"] == "Delivered":
-        if time.time()-val["started"] > 5 * 60:
-          #cstautils.writelog(self,0,key)
-          del self.calls[key]
+    self.updatePing()
 
   def chekMakeCall(self):
     if self.initialized == False:
@@ -247,7 +232,6 @@ class PhoneSystem:
           #self.send_direct_mess(b'A20B0201013006020200D30500')
           self.handleAARE(data)
         elif encode_hex(data)[0] != b'612f80020780a10706052b0c00815aa203020100a305a103020101be14281206072b0c00821d8148a007a0050303000800':
-          self.initialized = True
           try:
             decode = decoder.decode(data,asn1Spec=Rose())[0]
           except Exception as ex:
@@ -271,6 +255,7 @@ class PhoneSystem:
           print(f"In  ASN1: {data}")
 
   def handleAARE(self,data):
+    self.initialized = True
     #decode = decoder.decode(data,asn1Spec=Rose())[0]
     #print(f"In  ASN1: {decode}")
     self.send_direct_mess(b'A11602020602020133300DA40BA009A407A105A0030A0105')
@@ -278,6 +263,7 @@ class PhoneSystem:
     #self.StartUpMonitors(settings.localext)
     #self.send_direct_mess(b'A11602020602020133300DA40BA009A407A105A0030A0105')
     #self.send_direct_mess(b'A111020178020147300930058003313031A000')
+    self.addServer()
 
   def handleResult(self,data):
     decode = decoder.decode(data,asn1Spec=Rose())[0]
@@ -323,8 +309,8 @@ class PhoneSystem:
         number = listEntry.getComponentByName("number")
         self.numbers[int(numberID)] = int(number)
         self.StartMonitorDeviceNumber(int(numberID))
-        #if len(str(number)) == 4:
-        #  self.addState(str(number))
+        if len(str(number)) == 4:
+          self.addState(str(number))
     else:
      decode = decoder.decode(data,asn1Spec=Rose(opcode))[0]
      Obj = decode.getComponent()
@@ -378,8 +364,9 @@ class PhoneSystem:
     secondaryCallID = ""
     transferringNumber = ""
     transferredToNumber = ""
+    alertingNumber = ""
     if event == 'Originated':
-      print(cc)
+      #print(cc)
       originatedConnection = cc.getComponentByName("originatedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
@@ -399,7 +386,7 @@ class PhoneSystem:
       if associatedCallingNumber:
         print(associatedCallingNumber)
     elif event == 'Established':
-      print(cc)
+      #print(cc)
       originatedConnection = cc.getComponentByName("establishedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
@@ -426,7 +413,7 @@ class PhoneSystem:
     elif event == 'Failed':  
       cause = cc.getComponentByName("cause")
       #if int(cause) in self.failedCauses:
-      print(cc)
+      #print(cc)
       failedConnection = cc.getComponentByName("failedConnection")
       both = failedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
@@ -446,7 +433,7 @@ class PhoneSystem:
       if associatedCallingNumber:
         print(associatedCallingNumber)
     elif event == 'ConnectionCleared':  
-      print(cc)
+      #print(cc)
       originatedConnection = cc.getComponentByName("droppedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
@@ -455,7 +442,7 @@ class PhoneSystem:
       releasingNumber = self.getNumber(releasingDevice)
       print(releasingNumber)
     elif event == 'ServiceInitiated':  
-      print(cc)
+      #print(cc)
       originatedConnection = cc.getComponentByName("initiatedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
@@ -498,8 +485,15 @@ class PhoneSystem:
         if str(transferredNumber) != str(transferredToNumber):
           callingNumber = transferredNumber
     elif event == 'Delivered':
-      print(cc) 
-
+      #print(cc)
+      connection = cc.getComponentByName("connection")
+      both = connection.getComponentByName("both")
+      callID = both.getComponentByName("callID")
+      print(callID)
+      alertingDevice = cc.getComponentByName("alertingDevice")
+      alertingNumber = self.getNumber(alertingDevice)
+      print(alertingNumber)
+ 
     if bool(callID) and bool(callingNumber) and bool(calledNumber):
       self.addToDB(event=event,
                     callID=str(callID),
@@ -532,6 +526,9 @@ class PhoneSystem:
 
     if bool(callID) and bool(networkCalledNumber) and len(str(networkCalledNumber)) == 4:
       self.changeState(networkCalledNumber, 1)
+
+    if bool(callID) and bool(alertingNumber) and len(str(alertingNumber)) == 4:
+      self.changeState(alertingNumber, 1)
 
 
   def handleEvent(self, data):
@@ -635,8 +632,8 @@ class PhoneSystem:
       query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '30 minutes')
                   THEN UPDATE "NCalls"
                   SET DropDate = NOW(),
-                  CallerID = '{kwargs["callingNumber"]}',
-                  CalledID = '{kwargs["calledNumber"]}',
+                  --CallerID = '{kwargs["callingNumber"]}',
+                  --CalledID = '{kwargs["calledNumber"]}',
                   Origin = '{origin}',
                   "Line" = 'TapiLin',
                   CallID = '{ID}',
@@ -704,3 +701,31 @@ class PhoneSystem:
       cur = self.mydb.cursor();
       with cur:
         cur.execute(query)
+
+  def addServer(self):
+    query = f"""DO $do$ BEGIN CASE WHEN EXISTS (SELECT * FROM public."TapiServers" WHERE ATSID = '{self.atsID}')
+                  THEN
+                    UPDATE "TapiServers"
+                    SET LastStartDate = NOW()
+                    , Version = '{self.version}'
+                    , Server = '{self.server}'
+                    , pingdate = NOW()
+                    WHERE  ATSID = '{self.atsID}';
+                  ELSE
+                    INSERT INTO public."TapiServers"(ATSID, Server, Version, LastStartDate, pingdate)
+                    VALUES ('{self.atsID}', '{self.server}', '{self.version}', NOW(), NOW());
+                  END CASE; END $do$"""
+    with self.mydb:
+      cur = self.mydb.cursor();
+      with cur:
+        cur.execute(query)
+
+  def updatePing(self):
+    if self.initialized == True:
+      query = f"""UPDATE "TapiServers"
+                      SET pingdate = NOW()
+                      WHERE  ATSID = '{self.atsID}'"""
+      with self.mydb:
+        cur = self.mydb.cursor();
+        with cur:
+          cur.execute(query)
