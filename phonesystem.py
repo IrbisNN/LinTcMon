@@ -106,7 +106,6 @@ class PhoneSystem:
     ret.setComponentByName('invoke',result)
     self.sendMess(ret)
     self.resetTimeout()
-    self.updatePing()
 
   def chekMakeCall(self):
     if self.initialized == False:
@@ -192,6 +191,7 @@ class PhoneSystem:
     return self.id
     
   def readmess(self):
+    full = None
     try:
       data = self.connect.recv(1)
       if not data:
@@ -203,8 +203,9 @@ class PhoneSystem:
       full.append(data)
       length = ord(data)
       got = 0
+      fulllength = int(encode_hex(b''.join(full))[0], base=16)
       while length>got:
-        data = self.connect.recv(ord(data))
+        data = self.connect.recv(fulllength)
         if not data:
           return ""
         full.append(data)
@@ -213,6 +214,15 @@ class PhoneSystem:
     except socket.error as e:
       return full
 
+  def startCDR(self):
+    #CDRTransferMode
+    m = invoke(363)
+    m.setComponentByName('invokeid',self.NextID())
+    m.setComponentByName('opcode',363)
+    arg = StartCDRTransmissionArgument()
+    arg.setComponentByName('transferMode', 0)
+    m['args'] = arg
+    self.sendMess(m)
 
   def handleCsta(self,data):
     if data:
@@ -221,8 +231,8 @@ class PhoneSystem:
       else:
         if self.indebug:
           print(f"In  Hex:  {encode_hex(data)[0]}")
-        if data[0] == 0:
-          data = data[2:]
+        #if data[0] == 0:
+        data = data[2:]
         if self.indebug:
           print(f"In  Hex without 2 oct:  {encode_hex(data)[0]}")
         if encode_hex(data)[0] == b'612f80020780a10706052b0c00815aa203020100a305a103020101be14281206072b0c00821d8148a007a0050303000800':
@@ -263,6 +273,7 @@ class PhoneSystem:
     #self.StartUpMonitors(settings.localext)
     #self.send_direct_mess(b'A11602020602020133300DA40BA009A407A105A0030A0105')
     #self.send_direct_mess(b'A111020178020147300930058003313031A000')
+    #self.startCDR()
     self.addServer()
 
   def handleResult(self,data):
@@ -296,6 +307,7 @@ class PhoneSystem:
       result.setComponentByName('invokeid',Obj.getComponentByName('invokeid'))
       result.setComponentByName('args',res, verifyConstraints=False)
       self.sendMess(result)
+      self.updatePing()
     elif(opcode == 51):  
       decode = decoder.decode(data,asn1Spec=Rose(opcode))[0]
       Obj = decode.getComponent()
@@ -309,8 +321,10 @@ class PhoneSystem:
         number = listEntry.getComponentByName("number")
         self.numbers[int(numberID)] = int(number)
         self.StartMonitorDeviceNumber(int(numberID))
-        if len(str(number)) == 4:
-          self.addState(str(number))
+        #if len(str(number)) == 4:
+          #self.addState(str(number))
+    elif(opcode == 361):
+      self.handleCDR(data)
     else:
      decode = decoder.decode(data,asn1Spec=Rose(opcode))[0]
      Obj = decode.getComponent()
@@ -411,9 +425,9 @@ class PhoneSystem:
       if associatedCallingNumber:
         print(associatedCallingNumber)
     elif event == 'Failed':  
+      #print(cc)
       cause = cc.getComponentByName("cause")
       #if int(cause) in self.failedCauses:
-      #print(cc)
       failedConnection = cc.getComponentByName("failedConnection")
       both = failedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
@@ -454,7 +468,7 @@ class PhoneSystem:
       networkCalledNumber = self.getNumber(networkCalledDevice)
       print(networkCalledNumber)
     elif event == 'Transferred':
-      print(cc)  
+      #print(cc)  
       primaryOldCall = cc.getComponentByName("primaryOldCall")
       both = primaryOldCall.getComponentByName("both")
       primaryCallID = both.getComponentByName("callID")
@@ -530,6 +544,44 @@ class PhoneSystem:
     if bool(callID) and bool(alertingNumber) and len(str(alertingNumber)) == 4:
       self.changeState(alertingNumber, 1)
 
+  def handleCDR(self, data):
+    recordCreationTime = ""
+    callingDevice = ""
+    calledDevice = ""
+    associatedCallingDevice = ""
+    associatedCalledDevice = ""
+    networkCalledDevice = ""
+    chargedDevice = ""
+    connectionEnd = ""
+    connectionDuration = ""
+    billingID = ""
+    chargingInfo = ""
+    reasonForTerm = ""
+    accountInfo = ""
+    conditionCode = 0
+
+    dec = decoder.decode(data,asn1Spec=Rose())[0]
+    Obj = dec.getComponent()
+    # print(f"In ASN1: {dec}")
+    args = Obj.getComponentByName("args").getComponentByName("ArgSeq")
+    for i in args:
+      info = i.getComponent()
+      if info.isSameTypeWith(CDRInfo()):
+        for infoItem in info:
+          recordCreationTime = infoItem.getComponentByName("recordCreationTime")
+          callingDevice = self.getNumber(infoItem["callingDevice"])
+          calledDevice = self.getNumber(infoItem["calledDevice"])
+          associatedCallingDevice = self.getNumber(infoItem["associatedCallingDevice"])
+          associatedCalledDevice = self.getNumber(infoItem["associatedCalledDevice"])
+          networkCalledDevice = self.getNumber(infoItem["networkCalledDevice"])
+          connectionEnd = infoItem["connectionEnd"]
+          connectionDuration = infoItem["connectionDuration"]
+      elif info.isSameTypeWith(CSTACommonArguments()):
+        privateData = info.getComponentByName("privateData")
+        for i in privateData:
+          conditionCode = i["private"]["kmeAdditionalData"]["conditionCode"]["kmeCdrConditionCode"]
+
+
 
   def handleEvent(self, data):
     dec = decoder.decode(data,asn1Spec=Rose())[0] # dec = decoder.decode(data,asn1Spec=Rose(21))[0]
@@ -573,7 +625,6 @@ class PhoneSystem:
           elif cc.isSameTypeWith(TransferredEvent()):
             event = 'Transferred'
         except Exception as ex:
-          print(dec)
           print(ex)
         #if i.isSameTypeWith(EventTypeID()):
         #  typeid = i.getComponentByName("cSTAform")
@@ -591,7 +642,9 @@ class PhoneSystem:
     elif int(kwargs["callingNumber"]) in self.numbers.values():
       origin = "Outgoing"
     elif int(kwargs["calledNumber"]) in self.numbers.values():
-      origin = "Incomming"    
+      origin = "Incomming"
+    else:
+      origin = "Unknow"
 
     print(ID)
     if kwargs["event"] == 'Originated':
@@ -608,8 +661,8 @@ class PhoneSystem:
                   LastEvent = NOW()
                   WHERE  ID = '{kwargs["callID"]}' AND LastEvent > NOW() - interval '10 minutes';
                   ELSE
-                  INSERT INTO "NCalls"(startdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
-                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
+                  INSERT INTO "NCalls"(startdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent, Exterminate)
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW(), '0');
                   END IF; END $do$"""
     elif  kwargs["event"] == 'Established':
       query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes')
@@ -625,8 +678,8 @@ class PhoneSystem:
                   LastEvent = NOW()
                   WHERE  ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes';
                   ELSE
-                  INSERT INTO "NCalls"(answerdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
-                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
+                  INSERT INTO "NCalls"(answerdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent, Exterminate)
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW(), '0');
                   END IF; END $do$"""
     elif  kwargs["event"] == 'Failed': 
       query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '30 minutes')
@@ -641,8 +694,8 @@ class PhoneSystem:
                   LastEvent = NOW()
                   WHERE  ID = '{ID}' AND LastEvent > NOW() - interval '30 minutes';
                   ELSE
-                  INSERT INTO "NCalls"(DropDate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
-                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
+                  INSERT INTO "NCalls"(DropDate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent, Exterminate)
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW(), '0');
                   END IF; END $do$"""
     elif  kwargs["event"] == 'Transferred':
       query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes')
@@ -658,8 +711,8 @@ class PhoneSystem:
                   LastEvent = NOW()
                   WHERE  ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes';
                   ELSE
-                  INSERT INTO "NCalls"(answerdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent)
-                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW());
+                  INSERT INTO "NCalls"(answerdate, ID, CallerID, CalledID, Origin, "Line", ATSID, CallID, LastEvent, Exterminate)
+                  VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW(), '0');
                   END IF; END $do$"""
 
 

@@ -1,4 +1,4 @@
-from pyasn1.type import univ, namedtype, tag, constraint, namedval, char
+from pyasn1.type import univ, namedtype, tag, constraint, namedval, char, useful
 from acsespec import *
 
 
@@ -30,6 +30,7 @@ class DeviceID(univ.Sequence):
   componentType=namedtype.NamedTypes(
     namedtype.NamedType('deviceIdentifier',DeviceIdentifier()),
     namedtype.OptionalNamedType('mediaCallCharacteristics',univ.Null()),
+    namedtype.OptionalNamedType('other',univ.OctetString()),
     )
   #tagSet = univ.Sequence.tagSet.tagImplicitly(tag.Tag(tag.tagClassApplication,tag.tagFormatConstructed,1))
 
@@ -68,7 +69,8 @@ class KmeDeviceStateEntry(univ.Sequence):
   componentType = namedtype.NamedTypes(
     namedtype.OptionalNamedType('device', DeviceID()),
     namedtype.OptionalNamedType('number', char.IA5String()),
-    namedtype.OptionalNamedType('status', univ.Enumerated())
+    namedtype.OptionalNamedType('status', univ.Enumerated()),
+    namedtype.OptionalNamedType('status2', univ.Integer()),
   )
 
 class KmeDeviceStateList(univ.SequenceOf):
@@ -146,10 +148,22 @@ class DeviceIDHandle(univ.Choice):
     namedtype.OptionalNamedType('device', DeviceID())
   )
 
+#cl (0) -- Reverse Charging
+#tr (1) -- Call Transfer
+#fw (2) -- Call Forwarding
+#d0 (3) -- DISA/TIE
+#rm (4) -- Remote Maintenance
+#na (5) -- No Answer
+class KmeCdrConditionCode(univ.Choice):
+  componentType = namedtype.NamedTypes(
+    namedtype.OptionalNamedType('kmeCdrConditionCode', univ.Enumerated())
+  )
+
 class KmeAdditionalData(univ.Choice):
   componentType = namedtype.NamedTypes(
     namedtype.OptionalNamedType('device', DeviceIDHandle().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,6))),
     namedtype.OptionalNamedType('holdType', HoldType().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,9))),
+    namedtype.OptionalNamedType('conditionCode', KmeCdrConditionCode().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,10))),
     namedtype.OptionalNamedType('callID', CallID().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,13))),
     namedtype.OptionalNamedType('didNo', DeviceIDHandle().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,17)))
   )
@@ -380,6 +394,12 @@ class NetworkCalledDeviceID(univ.Choice):
     namedtype.OptionalNamedType('notKnown',univ.Null().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatSimple,7)))
     )
   tagSet = univ.Choice.tagSet.tagImplicitly(tag.Tag(tag.tagClassApplication,tag.tagFormatConstructed,8))
+
+class ChargedDevice(univ.Choice):
+  componentType = namedtype.NamedTypes(
+    namedtype.OptionalNamedType('operator', DeviceID().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,0))),
+    namedtype.OptionalNamedType('nonOperator', DeviceID().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,1)))
+    )
 
 class CSTAObject(univ.Choice):
   componentType=namedtype.NamedTypes(
@@ -763,6 +783,59 @@ class EventTypeID(univ.Choice):
     namedtype.OptionalNamedType("cSTAform",univ.Integer().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatSimple,0))),
     )
 
+class NumberOfChargingUnitsItem(univ.Sequence):
+  componentType=namedtype.NamedTypes(
+    namedtype.OptionalNamedType("chargingUnits", univ.Integer()),
+    namedtype.OptionalNamedType("typeOfUnits", univ.OctetString()),
+  )
+
+class NumberOfChargingUnits(univ.SequenceOf):
+  componentType=NumberOfChargingUnitsItem()      
+
+class NumberOfCurrencyUnits(univ.Sequence):
+  componentType=namedtype.NamedTypes(
+    namedtype.OptionalNamedType("currencyType", univ.OctetString()),
+	  namedtype.OptionalNamedType("currencyAmount", univ.Integer()),
+	  namedtype.OptionalNamedType("currencyMultiplier", univ.Enumerated()),
+  )
+
+class NumberUnits(univ.Choice):
+  componentType=namedtype.NamedTypes(
+    namedtype.OptionalNamedType("numberOfChargeUnits", NumberOfChargingUnits().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,0))),
+	  namedtype.OptionalNamedType("numberOfCurrencyUnits", NumberOfCurrencyUnits().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,1))),
+  )
+
+class ChargingInfo(univ.Sequence):
+  componentType=namedtype.NamedTypes(
+    namedtype.OptionalNamedType("numberUnits", NumberUnits()),
+    namedtype.OptionalNamedType("typeOfChargingInfo", univ.Enumerated())
+  )
+
+class StartCDRTransmissionArgument(univ.Sequence):
+  componentType=namedtype.NamedTypes(
+    namedtype.OptionalNamedType("transferMode", univ.Enumerated()),
+    )
+
+class CDRInformationItem(univ.Sequence):
+  componentType = namedtype.NamedTypes(
+    namedtype.OptionalNamedType('recordCreationTime', useful.GeneralizedTime()),
+    namedtype.OptionalNamedType('callingDevice', CallingDeviceID()),
+    namedtype.OptionalNamedType('calledDevice', CalledDeviceID()),
+    namedtype.OptionalNamedType('associatedCallingDevice', AssociatedCallingDeviceID()),
+    namedtype.OptionalNamedType('associatedCalledDevice', AssociatedCalledDeviceID()),
+    namedtype.OptionalNamedType('networkCalledDevice', NetworkCalledDeviceID()),
+    namedtype.OptionalNamedType('chargedDevice', ChargedDevice().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,2))),
+    namedtype.OptionalNamedType('connectionEnd', useful.GeneralizedTime().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatSimple,6))),
+    namedtype.OptionalNamedType('connectionDuration', univ.Integer().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatSimple,7))),
+    namedtype.OptionalNamedType('billingID', univ.Enumerated().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatSimple,11))),
+    namedtype.OptionalNamedType('chargingInfo', ChargingInfo().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,12))),
+    namedtype.OptionalNamedType('reasonForTerm', univ.Enumerated().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatSimple,14))),
+    namedtype.OptionalNamedType('accountInfo', univ.OctetString().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatSimple,16))), 
+    )
+
+class CDRInfo(univ.SequenceOf):
+  componentType=CDRInformationItem()
+
 def argumentseq(op=-1):
   jack = namedtype.NamedTypes(
     namedtype.OptionalNamedType('crossRefIdentifier',MonitorCrossRefID()),
@@ -774,8 +847,9 @@ def argumentseq(op=-1):
     #namedtype.OptionalNamedType('eventInfo',EventInfo()),
     namedtype.OptionalNamedType('eventInfo',EventSpecificInfo()),
     namedtype.OptionalNamedType('EscapeRegisterID',EscapeRegisterID()),
-    namedtype.OptionalNamedType('cstaprivatedata',CSTAPrivateDataData()) #.subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,4))),
+    namedtype.OptionalNamedType('cstaprivatedata',CSTAPrivateDataData()), #.subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,4))),
     #namedtype.OptionalNamedType('escape', EscapeArgument())
+    namedtype.OptionalNamedType('cdrInfo', CDRInfo())
     )
   if(op==21):
     jack=namedtype.NamedTypes(
@@ -864,6 +938,8 @@ def args(op=-1):
     ret = MonitorStartArgument()
   elif(op==10):
     ret = MakeCallArgument()
+  elif(op==363):
+    ret = StartCDRTransmissionArgument()
   else:
     ret = univ.Choice(componentType=namedtype.NamedTypes(
       namedtype.OptionalNamedType("null",univ.Null()),
@@ -877,7 +953,8 @@ def args(op=-1):
 class MonitorStartResult(univ.Sequence):
   componentType = namedtype.NamedTypes(
     namedtype.OptionalNamedType('crossRefIdentifier',MonitorCrossRefID()),
-    namedtype.OptionalNamedType('monitorFilter',MonitorFilter())
+    namedtype.OptionalNamedType('monitorFilter',MonitorFilter()),
+    namedtype.OptionalNamedType("cdrCrossRefID",univ.OctetString())
     )
 
 class ResultSeq(univ.SequenceOf):
@@ -957,7 +1034,6 @@ class Reject(univ.SequenceOf):
   componentType=RejectArgs()
   tagSet = univ.Sequence.tagSet.tagImplicitly(tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,4))
 
-
 def Rose(op=-1):
   ros = univ.Choice(componentType = namedtype.NamedTypes(
     namedtype.OptionalNamedType("Invoke",invoke(op)),
@@ -966,10 +1042,8 @@ def Rose(op=-1):
     namedtype.OptionalNamedType("Reject",Reject()),
     namedtype.OptionalNamedType("AARQ-apdu",AARQ_apdu()),
     namedtype.OptionalNamedType("AARE-apdu",AARE_apdu()),
-    namedtype.OptionalNamedType("ABRT-apdu",ABRT_apdu())
+    namedtype.OptionalNamedType("ABRT-apdu",ABRT_apdu()),
     ))
   return ros
-
-
 
 rose = Rose()
