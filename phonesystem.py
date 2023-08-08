@@ -575,6 +575,8 @@ class PhoneSystem:
       connectionEnd = ""
     if connectionDuration.isValue == False:
       connectionDuration = 0
+    else:
+      connectionDuration //= 10
     if conditionCode:  
       conditionCode = self.CDRConditionCode[conditionCode]
 
