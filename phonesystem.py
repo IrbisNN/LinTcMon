@@ -17,6 +17,7 @@ class PhoneSystem:
   last = time.time()
   outdebug = 0
   indebug = 0
+  eventdebug = 0
   mydb = None
   calls = {}
   usernames = {}
@@ -28,7 +29,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-08-01_LinTcMon"
+  version = "2023-08-08_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
 
@@ -210,7 +211,10 @@ class PhoneSystem:
       else:
         if self.indebug:
           print(f"In  Hex:  {encode_hex(data)[0]}")
-        #if data[0] == 0:
+
+        if isinstance(data, list):
+          data = data[0]
+
         data = data[2:]
         if self.indebug:
           print(f"In  Hex without 2 oct:  {encode_hex(data)[0]}")
@@ -299,8 +303,8 @@ class PhoneSystem:
         number = listEntry.getComponentByName("number")
         self.numbers[int(numberID)] = int(number)
         self.StartMonitorDeviceNumber(int(numberID))
-        if len(str(number)) == 4:
-          self.addState(str(number))
+        #if len(str(number)) == 4:
+          #self.addState(str(number))
     elif(opcode == 361):
       self.handleCDR(data)
     else:
@@ -342,8 +346,9 @@ class PhoneSystem:
     return None
   
   def updateCalls(self, cc, event, refID):
-    print(event)
-    print(refID)
+    if self.eventdebug:
+      print(event)
+      print(refID)
     callID = ""
     callingNumber = ""
     calledNumber = ""
@@ -362,45 +367,52 @@ class PhoneSystem:
       originatedConnection = cc.getComponentByName("originatedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
-      print(callID)
+      if self.eventdebug:
+        print(callID)
       callingDevice = cc.getComponentByName("callingDevice")
       callingNumber = self.getNumber(callingDevice)
-      print(callingNumber)
+      if self.eventdebug:
+        print(callingNumber)
       calledDevice = cc.getComponentByName("calledDevice")
       calledNumber = self.getNumber(calledDevice)
-      print(calledNumber)
+      if self.eventdebug:
+        print(calledNumber)
       associatedCalledDevice = cc.getComponentByName("associatedCalledDevice")
       associatedCalledNumber = self.getNumber(associatedCalledDevice)
-      if associatedCalledNumber:
+      if associatedCalledNumber and self.eventdebug:
         print(associatedCalledNumber)
       associatedCallingDevice = cc.getComponentByName("associatedCallingDevice")
       associatedCallingNumber = self.getNumber(associatedCallingDevice)
-      if associatedCallingNumber:
+      if associatedCallingNumber and self.eventdebug:
         print(associatedCallingNumber)
     elif event == 'Established':
       #print(cc)
       originatedConnection = cc.getComponentByName("establishedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
-      print(callID)
+      if self.eventdebug:
+        print(callID)
       callingDevice = cc.getComponentByName("callingDevice")
       callingNumber = self.getNumber(callingDevice)
-      print(callingNumber)
+      if self.eventdebug:
+        print(callingNumber)
       calledDevice = cc.getComponentByName("calledDevice")
       calledNumber = self.getNumber(calledDevice)
-      print(calledNumber)
+      if self.eventdebug:
+        print(calledNumber)
       answeringDevice = cc.getComponentByName("answeringDevice")
       answeringNumber = self.getNumber(answeringDevice)
-      print(answeringNumber)
+      if self.eventdebug:
+        print(answeringNumber)
       if answeringNumber and answeringNumber != calledNumber:
         calledNumber = answeringNumber
       associatedCalledDevice = cc.getComponentByName("associatedCalledDevice")
       associatedCalledNumber = self.getNumber(associatedCalledDevice)
-      if associatedCalledNumber:
+      if associatedCalledNumber and self.eventdebug:
         print(associatedCalledNumber)
       associatedCallingDevice = cc.getComponentByName("associatedCallingDevice")
       associatedCallingNumber = self.getNumber(associatedCallingDevice)
-      if associatedCallingNumber:
+      if associatedCallingNumber and self.eventdebug:
         print(associatedCallingNumber)
     elif event == 'Failed':  
       #print(cc)
@@ -409,42 +421,50 @@ class PhoneSystem:
       failedConnection = cc.getComponentByName("failedConnection")
       both = failedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
-      print(callID)
+      if self.eventdebug:
+        print(callID)
       callingDevice = cc.getComponentByName("callingDevice")
       callingNumber = self.getNumber(callingDevice)
-      print(callingNumber)
+      if self.eventdebug:
+        print(callingNumber)
       calledDevice = cc.getComponentByName("calledDevice")
       calledNumber = self.getNumber(calledDevice)
-      print(calledNumber)
+      if self.eventdebug:
+        print(calledNumber)
       associatedCalledDevice = cc.getComponentByName("associatedCalledDevice")
       associatedCalledNumber = self.getNumber(associatedCalledDevice)
-      if associatedCalledNumber:
+      if associatedCalledNumber and self.eventdebug:
         print(associatedCalledNumber)
       associatedCallingDevice = cc.getComponentByName("associatedCallingDevice")
       associatedCallingNumber = self.getNumber(associatedCallingDevice)
-      if associatedCallingNumber:
+      if associatedCallingNumber and self.eventdebug:
         print(associatedCallingNumber)
     elif event == 'ConnectionCleared':  
       #print(cc)
       originatedConnection = cc.getComponentByName("droppedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
-      print(callID)
+      if self.eventdebug:
+        print(callID)
       releasingDevice = cc.getComponentByName("releasingDevice")
       releasingNumber = self.getNumber(releasingDevice)
-      print(releasingNumber)
+      if self.eventdebug:
+        print(releasingNumber)
     elif event == 'ServiceInitiated':  
       #print(cc)
       originatedConnection = cc.getComponentByName("initiatedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
-      print(callID)
+      if self.eventdebug:
+        print(callID)
       initiatingDevice = cc.getComponentByName("initiatingDevice")
       initiatingNumber = self.getNumber(initiatingDevice)
-      print(initiatingNumber)
+      if self.eventdebug:
+        print(initiatingNumber)
       networkCalledDevice = cc.getComponentByName("networkCalledDevice")
       networkCalledNumber = self.getNumber(networkCalledDevice)
-      print(networkCalledNumber)
+      if self.eventdebug:
+        print(networkCalledNumber)
     elif event == 'Transferred':
       #print(cc)  
       primaryOldCall = cc.getComponentByName("primaryOldCall")
@@ -459,11 +479,13 @@ class PhoneSystem:
 
       transferringDevice = cc.getComponentByName("transferringDevice")
       transferringNumber = self.getNumber(transferringDevice)
-      print(transferringNumber)
+      if self.eventdebug:
+        print(transferringNumber)
 
       transferredToDevice = cc.getComponentByName("transferredToDevice")
       transferredToNumber = self.getNumber(transferredToDevice)
-      print(transferredToNumber)
+      if self.eventdebug:
+        print(transferredToNumber)
       calledNumber = transferredToNumber
 
       transferredConnections = cc.getComponentByName("transferredConnections")
@@ -471,9 +493,11 @@ class PhoneSystem:
         newConnection = transCon.getComponentByName("newConnection")
         both = newConnection.getComponentByName("both")
         callID = both.getComponentByName("callID")
-        print(callID)
+        if self.eventdebug:
+          print(callID)
         transferredNumber = self.getNumberDeviceID(both)
-        print(transferredNumber)
+        if self.eventdebug:
+          print(transferredNumber)
         if str(transferredNumber) != str(transferredToNumber):
           callingNumber = transferredNumber
     elif event == 'Delivered':
@@ -481,10 +505,12 @@ class PhoneSystem:
       connection = cc.getComponentByName("connection")
       both = connection.getComponentByName("both")
       callID = both.getComponentByName("callID")
-      print(callID)
+      if self.eventdebug:
+        print(callID)
       alertingDevice = cc.getComponentByName("alertingDevice")
       alertingNumber = self.getNumber(alertingDevice)
-      print(alertingNumber)
+      if self.eventdebug:
+        print(alertingNumber)
  
     if bool(callID) and bool(callingNumber) and bool(calledNumber):
       self.addToDB(event=event,
@@ -592,12 +618,7 @@ class PhoneSystem:
                     '{conditionCode}',
                     '{self.atsID}');
                   END IF; END $do$"""
-
-    if self.mydb and query:
-      with self.mydb:
-        cur = self.mydb.cursor();
-        with cur:
-          cur.execute(query)
+    self.executeQuery(query)
           
   def handleEvent(self, data):
     dec = decoder.decode(data,asn1Spec=Rose())[0] # dec = decoder.decode(data,asn1Spec=Rose(21))[0]
@@ -662,7 +683,6 @@ class PhoneSystem:
     else:
       origin = "Unknow"
 
-    print(ID)
     if kwargs["event"] == 'Originated':
       query = f"""DO $do$ BEGIN IF EXISTS (SELECT ID FROM "NCalls" WHERE ID = '{ID}' AND LastEvent > NOW() - interval '10 minutes')
                   THEN UPDATE "NCalls"
@@ -731,28 +751,22 @@ class PhoneSystem:
                   VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW(), '0');
                   END IF; END $do$"""
 
-    if self.mydb and query:
-      with self.mydb:
-        cur = self.mydb.cursor();
-        with cur:
-          cur.execute(query)
+    self.executeQuery(query)
       
 
   def changeState(self, number, status=0):
-    print(number, status)
+    if self.eventdebug:
+      print(number, status)
     if status == 1 and str(number) not in self.avtiveNumbers:
       self.avtiveNumbers.append(str(number))
     elif status == 0 and str(number) in self.avtiveNumbers:
       self.avtiveNumbers.remove(str(number))
     query = f"""SELECT public.tcmonupdatestatus('{self.numberPref}{number}',  {status})"""
-  
-    with self.mydb:
-      cur = self.mydb.cursor();
-      with cur:
-        cur.execute(query)
+    self.executeQuery(query)
 
   def addState(self, number, status=0):
-    print(number, status)
+    if self.eventdebug:
+      print(number, status)
   
     query = f"""DO $do$ BEGIN CASE WHEN EXISTS (SELECT * FROM "BusyCalls" WHERE extension = '{self.numberPref}{number}' )
                 THEN
@@ -764,10 +778,7 @@ class PhoneSystem:
                   INSERT INTO "BusyCalls"("ID", extension, ats, status)
                   VALUES ('{self.atsID}{self.numberPref}{number}', '{self.numberPref}{number}', '{self.atsID}', {status});
                 END CASE;  END $do$"""
-    with self.mydb:
-      cur = self.mydb.cursor();
-      with cur:
-        cur.execute(query)
+    self.executeQuery(query)
 
   def addServer(self):
     query = f"""DO $do$ BEGIN CASE WHEN EXISTS (SELECT * FROM public."TapiServers" WHERE ATSID = '{self.atsID}')
@@ -782,16 +793,17 @@ class PhoneSystem:
                     INSERT INTO public."TapiServers"(ATSID, Server, Version, LastStartDate, pingdate)
                     VALUES ('{self.atsID}', '{self.server}', '{self.version}', NOW(), NOW());
                   END CASE; END $do$"""
-    with self.mydb:
-      cur = self.mydb.cursor();
-      with cur:
-        cur.execute(query)
+    self.executeQuery(query)
 
   def updatePing(self):
     if self.initialized == True:
       query = f"""UPDATE "TapiServers"
                       SET pingdate = NOW()
                       WHERE  ATSID = '{self.atsID}'"""
+      self.executeQuery(query)
+
+  def executeQuery(self, query):
+    if self.mydb and query:
       with self.mydb:
         cur = self.mydb.cursor();
         with cur:
