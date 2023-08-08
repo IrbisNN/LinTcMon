@@ -30,6 +30,7 @@ class PhoneSystem:
   prefMakeCalls = ""
   version = "2023-08-01_LinTcMon"
   server = os.uname()[1]
+  CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
 
   def __init__(self,host=('', 33333),db=None):
     self.hostname = host
@@ -85,28 +86,6 @@ class PhoneSystem:
     o['args']['calledDirectoryNumber'] = devCalled
     self.sendMess(o)
   
-  def DTMF(self,connectionid,charactersToSend):
-    if type(connectionid) != type({}):
-      return
-    o = invoke(19)
-    o.setComponentByName('invokeid',self.NextID())
-    o.setComponentByName('opcode',19)
-    arg = ArgumentSeq()
-    #arg.setComponentByPosition(0,cstautils.toConnectionID(connectionid))
-    arg.setComponentByPosition(1,char.IA5String(charactersToSend))
-    o.setComponentByName('args',arg)
-    self.sendMess(o)
-
-  def SendStatus(self):
-    result = invoke(52)
-    result.setComponentByName('opcode',52)
-    result.setComponentByName('invokeid',self.NextID())
-    result['args']['systemStatus'] = SystemStatus(2)
-    ret = Rose(52)
-    ret.setComponentByName('invoke',result)
-    self.sendMess(ret)
-    self.resetTimeout()
-
   def chekMakeCall(self):
     if self.initialized == False:
       return
@@ -271,9 +250,8 @@ class PhoneSystem:
     self.send_direct_mess(b'A11602020602020133300DA40BA009A407A105A0030A0105')
     self.send_direct_mess(b'A116020200E0020133300DA40BA009A407A105A0030A0102')
     #self.StartUpMonitors(settings.localext)
-    #self.send_direct_mess(b'A11602020602020133300DA40BA009A407A105A0030A0105')
     #self.send_direct_mess(b'A111020178020147300930058003313031A000')
-    #self.startCDR()
+    self.startCDR()
     self.addServer()
 
   def handleResult(self,data):
@@ -321,8 +299,8 @@ class PhoneSystem:
         number = listEntry.getComponentByName("number")
         self.numbers[int(numberID)] = int(number)
         self.StartMonitorDeviceNumber(int(numberID))
-        #if len(str(number)) == 4:
-          #self.addState(str(number))
+        if len(str(number)) == 4:
+          self.addState(str(number))
     elif(opcode == 361):
       self.handleCDR(data)
     else:
@@ -545,24 +523,31 @@ class PhoneSystem:
       self.changeState(alertingNumber, 1)
 
   def handleCDR(self, data):
+    result = ReturnResult()
+    decode = decoder.decode(data,asn1Spec=Rose())[0]
+    Obj = decode.getComponent()
+    res = ResultSeq()
+    res[0].setComponentByPosition(0,univ.Integer(361))
+    res[1].setComponentByPosition(1,univ.Null(''))
+    result.setComponentByName('invokeid',Obj.getComponentByName('invokeid'))
+    result.setComponentByName('args',res, verifyConstraints=False)
+    self.sendMess(result)
+    
+    ID = ""
+    line = ""
     recordCreationTime = ""
     callingDevice = ""
     calledDevice = ""
     associatedCallingDevice = ""
     associatedCalledDevice = ""
-    networkCalledDevice = ""
-    chargedDevice = ""
+    #networkCalledDevice = ""
     connectionEnd = ""
     connectionDuration = ""
-    billingID = ""
-    chargingInfo = ""
-    reasonForTerm = ""
-    accountInfo = ""
-    conditionCode = 0
+    conditionCode = ""
 
     dec = decoder.decode(data,asn1Spec=Rose())[0]
+    #print(f"In ASN1: {dec}")
     Obj = dec.getComponent()
-    # print(f"In ASN1: {dec}")
     args = Obj.getComponentByName("args").getComponentByName("ArgSeq")
     for i in args:
       info = i.getComponent()
@@ -573,7 +558,7 @@ class PhoneSystem:
           calledDevice = self.getNumber(infoItem["calledDevice"])
           associatedCallingDevice = self.getNumber(infoItem["associatedCallingDevice"])
           associatedCalledDevice = self.getNumber(infoItem["associatedCalledDevice"])
-          networkCalledDevice = self.getNumber(infoItem["networkCalledDevice"])
+          #networkCalledDevice = self.getNumber(infoItem["networkCalledDevice"])
           connectionEnd = infoItem["connectionEnd"]
           connectionDuration = infoItem["connectionDuration"]
       elif info.isSameTypeWith(CSTACommonArguments()):
@@ -581,8 +566,37 @@ class PhoneSystem:
         for i in privateData:
           conditionCode = i["private"]["kmeAdditionalData"]["conditionCode"]["kmeCdrConditionCode"]
 
+    ID = f'{ID}{recordCreationTime}{callingDevice}{calledDevice}'
+    if associatedCallingDevice:
+      line = associatedCallingDevice
+    if associatedCalledDevice:
+      line = associatedCalledDevice
+    if connectionEnd.isValue == False:
+      connectionEnd = ""
+    if connectionDuration.isValue == False:
+      connectionDuration = 0
+    if conditionCode:  
+      conditionCode = self.CDRConditionCode[conditionCode]
 
+    query = f"""DO $do$ BEGIN IF NOT EXISTS (SELECT "ID" FROM "TAPICDR" WHERE "ID" = '{ID}')
+                  THEN INSERT INTO "TAPICDR"("ID", datestart, callingnumber, callednumber, "line", dateend, duration, conditioncode, atsid)
+                  VALUES ('{ID}',
+                    TO_TIMESTAMP('{recordCreationTime}', 'YYYYMMDDHH24MISS')::timestamp,
+                    '{callingDevice}',
+                    '{calledDevice}',
+                    '{line}',
+                    TO_TIMESTAMP('{connectionEnd}', 'YYYYMMDDHH24MISS')::timestamp,
+                    '{connectionDuration}',
+                    '{conditionCode}',
+                    '{self.atsID}');
+                  END IF; END $do$"""
 
+    if self.mydb and query:
+      with self.mydb:
+        cur = self.mydb.cursor();
+        with cur:
+          cur.execute(query)
+          
   def handleEvent(self, data):
     dec = decoder.decode(data,asn1Spec=Rose())[0] # dec = decoder.decode(data,asn1Spec=Rose(21))[0]
     Obj = dec.getComponent()
@@ -715,13 +729,11 @@ class PhoneSystem:
                   VALUES (NOW(), '{ID}', '{kwargs["callingNumber"]}', '{kwargs["calledNumber"]}', '{origin}', 'TapiLin', '{self.atsID}', '{ID}', NOW(), '0');
                   END IF; END $do$"""
 
-
     if self.mydb and query:
       with self.mydb:
         cur = self.mydb.cursor();
         with cur:
           cur.execute(query)
-          self.mydb.commit()
       
 
   def changeState(self, number, status=0):
