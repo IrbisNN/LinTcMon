@@ -6,6 +6,7 @@ from pyasn1.codec.ber import encoder,decoder
 import codecs
 from datetime import datetime
 import os
+import psycopg2
 
 encode_hex = codecs.getencoder("hex_codec")
 decode_hex = codecs.getdecoder("hex_codec")
@@ -17,7 +18,8 @@ class PhoneSystem:
   last = time.time()
   outdebug = 0
   indebug = 0
-  eventdebug = 0
+  eventdebug = 1
+  dbparam = {}
   mydb = None
   calls = {}
   usernames = {}
@@ -33,11 +35,12 @@ class PhoneSystem:
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
 
-  def __init__(self,host=('', 33333),db=None):
+  def __init__(self,host=('', 33333),dbparametrs=None):
+    self.dbparam = dbparametrs
+    self.connectdb()
     self.hostname = host
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     self.startup(self.hostname)
-    self.mydb = db
 
   def startup(self,hostname):
     self.connect.connect_ex(hostname)
@@ -804,7 +807,25 @@ class PhoneSystem:
 
   def executeQuery(self, query):
     if self.mydb and query:
-      with self.mydb:
-        cur = self.mydb.cursor();
-        with cur:
-          cur.execute(query)
+      try:
+        with self.mydb:
+          cur = self.mydb.cursor();
+          with cur:
+            cur.execute(query)
+      except (psycopg2.DatabaseError, psycopg2.OperationalError) as error:
+        time.sleep(5)
+        self.connectdb()
+
+  def connectdb(self):
+    if not self.mydb:
+      try:
+        self.mydb = psycopg2.connect(database="TapiCalls", host=self.dbparam["host"], user=self.dbparam["user"], password=self.dbparam["password"])
+        self.mydb.autocommit = True
+        if self.mydb:
+          cur = self.mydb.cursor()
+          cur.execute("commit;")
+      except psycopg2.OperationalError as error:
+        time.sleep(5)
+        self.connectdb()
+      except (Exception, psycopg2.Error) as error:
+          raise error

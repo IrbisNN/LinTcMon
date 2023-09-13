@@ -2,23 +2,22 @@
 
 import select
 import time
-import asyncio
-import psycopg2
 import phonesystem
 from settings import ATS_ID, ATS_IP, ATS_PORT, DB_SERVER, DB_USER, DB_PWD, NUMBER_PREF, PREF_MAKECALL
 
 
-mydb = None
-mydb = psycopg2.connect(database="TapiCalls", host=DB_SERVER, user=DB_USER, password=DB_PWD)
-mydb.autocommit = True
-if mydb:
-  cur = mydb.cursor()
-  cur.execute("commit;")
+dbparam = {"host":DB_SERVER, "user":DB_USER, "password":DB_PWD}
+#mydb = None
+#mydb = psycopg2.connect(database="TapiCalls", host=DB_SERVER, user=DB_USER, password=DB_PWD)
+#mydb.autocommit = True
+#if mydb:
+#  cur = mydb.cursor()
+#  cur.execute("commit;")
 
 HOST = ATS_IP
 PORT = ATS_PORT
 
-so = phonesystem.PhoneSystem((HOST,PORT),mydb)
+so = phonesystem.PhoneSystem((HOST,PORT),dbparam)
 so.atsID = ATS_ID
 so.numberPref = NUMBER_PREF
 so.prefMakeCalls = PREF_MAKECALL
