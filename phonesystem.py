@@ -31,7 +31,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-09-14_LinTcMon"
+  version = "2023-09-20_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
 
@@ -49,12 +49,15 @@ class PhoneSystem:
 
   def timeout(self):
     tm = 3-(time.time()-self.last)
-    if tm<0:
-      tm=0
+    if tm < 0:
+      tm = 0
     return tm
 
   def resetTimeout(self):
     self.last = time.time()
+    datediff = time.time() - self.lastPing
+    if datediff > 5*60:
+      self.startup(self.hostname)
 
 
   def SendSec(self):
@@ -306,8 +309,8 @@ class PhoneSystem:
         number = listEntry.getComponentByName("number")
         self.numbers[int(numberID)] = int(number)
         self.StartMonitorDeviceNumber(int(numberID))
-        #if len(str(number)) == 4:
-          #self.addState(str(number))
+        if len(str(number)) == 4:
+          self.addState(str(number))
     elif(opcode == 361):
       self.handleCDR(data)
     else:
@@ -760,12 +763,13 @@ class PhoneSystem:
   def changeState(self, number, status=0):
     if self.eventdebug:
       print(number, status)
-    if status == 1 and str(number) not in self.avtiveNumbers:
-      self.avtiveNumbers.append(str(number))
-    elif status == 0 and str(number) in self.avtiveNumbers:
-      self.avtiveNumbers.remove(str(number))
-    query = f"""SELECT public.tcmonupdatestatus('{self.numberPref}{number}',  {status})"""
-    self.executeQuery(query)
+    if int(number) in self.numbers: 
+      if status == 1 and str(number) not in self.avtiveNumbers:
+        self.avtiveNumbers.append(str(number))
+      elif status == 0 and str(number) in self.avtiveNumbers:
+        self.avtiveNumbers.remove(str(number))
+      query = f"""SELECT public.tcmonupdatestatus('{self.numberPref}{number}',  {status})"""
+      self.executeQuery(query)
 
   def addState(self, number, status=0):
     if self.eventdebug:
@@ -800,6 +804,7 @@ class PhoneSystem:
 
   def updatePing(self):
     if self.initialized == True:
+      self.lastPing = time.time()
       query = f"""UPDATE "TapiServers"
                       SET pingdate = NOW()
                       WHERE  ATSID = '{self.atsID}'"""
