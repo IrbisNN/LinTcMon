@@ -35,14 +35,15 @@ class PhoneSystem:
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
 
-  def __init__(self,host=('', 33333),dbparametrs=None):
+  def __init__(self, host=('', 33333), dbparametrs=None):
     self.dbparam = dbparametrs
     self.connectdb()
     self.hostname = host
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     self.startup(self.hostname)
 
-  def startup(self,hostname):
+  def startup(self, hostname):
+    print("Connect ot ATS")
     self.connect.connect_ex(hostname)
     self.connect.setblocking(False)
     #self.connect.send(b'B')
@@ -57,6 +58,7 @@ class PhoneSystem:
     self.last = time.time()
     datediff = time.time() - self.lastPing
     if datediff > 5*60:
+      print("Reconnect ot ATS")
       self.startup(self.hostname)
 
 
@@ -819,6 +821,7 @@ class PhoneSystem:
             cur.execute(query)
       except (psycopg2.DatabaseError, psycopg2.OperationalError) as error:
         time.sleep(5)
+        print("Reconnect ot DB")
         self.connectdb()
 
   def connectdb(self):
@@ -829,8 +832,10 @@ class PhoneSystem:
         if self.mydb:
           cur = self.mydb.cursor()
           cur.execute("commit;")
+          print("DB Connected")
       except psycopg2.OperationalError as error:
         time.sleep(5)
+        print("Reconnect ot DB")
         self.connectdb()
       except (Exception, psycopg2.Error) as error:
           raise error
