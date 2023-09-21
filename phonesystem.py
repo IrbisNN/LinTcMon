@@ -18,7 +18,7 @@ class PhoneSystem:
   last = time.time()
   outdebug = 0
   indebug = 0
-  eventdebug = 1
+  eventdebug = 0
   dbparam = {}
   mydb = None
   calls = {}
