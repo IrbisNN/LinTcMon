@@ -31,7 +31,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-09-20_LinTcMon"
+  version = "2023-09-21_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
 
@@ -59,6 +59,7 @@ class PhoneSystem:
     datediff = time.time() - self.lastPing
     if datediff > 5*60:
       print("Reconnect ot ATS")
+      self.connect.close()
       self.startup(self.hostname)
 
 
