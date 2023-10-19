@@ -3,7 +3,7 @@
 import select
 import time
 import phonesystem
-from settings import ATS_ID, ATS_IP, ATS_PORT, DB_SERVER, DB_USER, DB_PWD, NUMBER_PREF, PREF_MAKECALL
+from settings import ATS_ID, ATS_IP, ATS_PORT, DB_SERVER, DB_USER, DB_PWD, NUMBER_PREF, PREF_MAKECALL, DEBUG
 
 
 dbparam = {"host":DB_SERVER, "user":DB_USER, "password":DB_PWD}
@@ -17,7 +17,7 @@ dbparam = {"host":DB_SERVER, "user":DB_USER, "password":DB_PWD}
 HOST = ATS_IP
 PORT = ATS_PORT
 
-so = phonesystem.PhoneSystem((HOST,PORT),dbparam)
+so = phonesystem.PhoneSystem((HOST,PORT),dbparam, DEBUG)
 so.atsID = ATS_ID
 so.numberPref = NUMBER_PREF
 so.prefMakeCalls = PREF_MAKECALL

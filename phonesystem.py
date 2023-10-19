@@ -27,16 +27,19 @@ class PhoneSystem:
   avtiveNumbers = []
   atsID = ""
   numberPref = ""
-  failedCauses = [3,13,65,14,29,15,16,69,33]
+  #failedCauses = [3,13,65,14,29,15,16,69,33]
+  failedCauses = [46,65]
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-10-19_LinTcMon"
+  version = "2023-10-20_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
 
-  def __init__(self, host=('', 33333), dbparametrs=None):
+  def __init__(self, host=('', 33333), dbparametrs=None, debug=0):
+    self.indebug = debug
+    self.eventdebug = debug
     self.dbparam = dbparametrs
     self.connectdb()
     self.hostname = host
@@ -560,7 +563,7 @@ class PhoneSystem:
                     callingNumber=str(callingNumber),
                     calledNumber=str(transferringNumber))
 
-    if (bool(primaryCallID) or bool(secondaryCallID)) and bool(transferringNumber):
+    if (bool(primaryCallID) or bool(secondaryCallID)) and bool(transferringNumber) and len(str(transferringNumber)) == 4:
       self.changeState(transferringNumber, 0)
 
     if bool(callID) and bool(releasingNumber) and len(str(releasingNumber)) == 4:
@@ -574,6 +577,12 @@ class PhoneSystem:
 
     if bool(callID) and bool(alertingNumber) and len(str(alertingNumber)) == 4:
       self.changeState(alertingNumber, 1)
+
+    if event == 'Failed' and bool(callID) and int(cause) in self.failedCauses:
+      if bool(callingNumber) and len(str(callingNumber)) == 4:
+        self.changeState(callingNumber, 0)
+      if bool(calledNumber) and len(str(calledNumber)) == 4:
+        self.changeState(calledNumber, 0)
 
   def handleCDR(self, data):
     result = ReturnResult()

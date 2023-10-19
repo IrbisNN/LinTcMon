@@ -11,3 +11,5 @@ DB_PWD = environ.get("DB_PWD", "")
 
 NUMBER_PREF = environ.get("NUMBER_PREF", "52")
 PREF_MAKECALL = environ.get("PREF_MAKECALL", "9")
+
+DEBUG = environ.get("DEBUG", 0)
