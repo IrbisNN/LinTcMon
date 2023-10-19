@@ -31,9 +31,10 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-09-21_LinTcMon"
+  version = "2023-10-19_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
+  CDRStarted = False
 
   def __init__(self, host=('', 33333), dbparametrs=None):
     self.dbparam = dbparametrs
@@ -57,11 +58,21 @@ class PhoneSystem:
   def resetTimeout(self):
     self.last = time.time()
     datediff = time.time() - self.lastPing
-    if datediff > 5*60:
-      print("Reconnect ot ATS")
-      self.connect.close()
-      self.startup(self.hostname)
+    if datediff > 1*60 and self.CDRStarted == False:
+      self.startCDR()
+    elif datediff > 5*60:
+      self.reconnectATS()
 
+  def reconnectATS(self):
+    print("Reconnect ot ATS")
+    try:
+      self.connect.shutdown(socket.SHUT_RDWR)
+      self.connect.close()    
+    except socket.error as e:
+      print(e)
+    self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
+    self.startup(self.hostname)
+    self.lastPing = time.time()
 
   def SendSec(self):
     app = ApplicationContextName().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,1))
@@ -204,6 +215,8 @@ class PhoneSystem:
       return full
 
   def startCDR(self):
+    if self.CDRStarted == True:
+      return
     #CDRTransferMode
     m = invoke(363)
     m.setComponentByName('invokeid',self.NextID())
@@ -212,6 +225,7 @@ class PhoneSystem:
     arg.setComponentByName('transferMode', 0)
     m['args'] = arg
     self.sendMess(m)
+    self.CDRStarted = True
 
   def handleCsta(self,data):
     if data:
@@ -227,7 +241,9 @@ class PhoneSystem:
         data = data[2:]
         if self.indebug:
           print(f"In  Hex without 2 oct:  {encode_hex(data)[0]}")
-        if encode_hex(data)[0] == b'612f80020780a10706052b0c00815aa203020100a305a103020101be14281206072b0c00821d8148a007a0050303000800':
+        if encode_hex(data)[0] == b'800100':
+          self.reconnectATS()
+        elif encode_hex(data)[0] == b'612f80020780a10706052b0c00815aa203020100a305a103020101be14281206072b0c00821d8148a007a0050303000800':
           print(f"In  ASN1: {data}")
         elif encode_hex(data)[0] == b'a10c020101020200d330030a0102':
           #self.handleAARE(data)
@@ -256,6 +272,7 @@ class PhoneSystem:
         else:
           print(f"In  ASN1: {data}")
 
+
   def handleAARE(self,data):
     self.initialized = True
     #decode = decoder.decode(data,asn1Spec=Rose())[0]
@@ -264,8 +281,8 @@ class PhoneSystem:
     self.send_direct_mess(b'A116020200E0020133300DA40BA009A407A105A0030A0102')
     #self.StartUpMonitors(settings.localext)
     #self.send_direct_mess(b'A111020178020147300930058003313031A000')
-    self.startCDR()
     self.addServer()
+    #self.startCDR()
 
   def handleResult(self,data):
     decode = decoder.decode(data,asn1Spec=Rose())[0]
@@ -305,6 +322,7 @@ class PhoneSystem:
       args = Obj.getComponentByName("args").getComponentByName("ArgSeq")
       ar = args.getComponentByPosition(0)
       ar = ar.getComponentByName("cstaprivatedata").getComponentByName("private").getComponentByName("kmeSystemData")
+      ls = ar.getComponentByName("systemDataLinkedReply").getComponentByName("KmeSystemDataLinkedReply").getComponentByName("lastSegment")
       ar = ar.getComponentByName("systemDataLinkedReply").getComponentByName("KmeSystemDataLinkedReply").getComponentByName("sysData")
       ar = ar.getComponentByName("KmeGetSystemDataRsp").getComponentByName("deviceList").getComponentByName("KmeDeviceStateList")
       for listEntry in ar:
