@@ -32,7 +32,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-10-20_LinTcMon"
+  version = "2023-10-25_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
