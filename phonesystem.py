@@ -28,7 +28,7 @@ class PhoneSystem:
   atsID = ""
   numberPref = ""
   #failedCauses = [3,13,65,14,29,15,16,69,33]
-  failedCauses = [46,65]
+  failedCauses = [46,65,35]
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
