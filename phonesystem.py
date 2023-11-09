@@ -32,10 +32,11 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-10-25_LinTcMon"
+  version = "2023-11-10_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
+  socopen = False
 
   def __init__(self, host=('', 33333), dbparametrs=None, debug=0):
     self.indebug = debug
@@ -51,6 +52,7 @@ class PhoneSystem:
     self.connect.connect_ex(hostname)
     self.connect.setblocking(False)
     #self.connect.send(b'B')
+    self.socopen = True
 
   def timeout(self):
     tm = 3-(time.time()-self.last)
@@ -73,8 +75,9 @@ class PhoneSystem:
       self.connect.close()    
     except socket.error as e:
       print(e)
+    self.socopen = False    
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    self.startup(self.hostname)
+    #self.startup(self.hostname)
     self.lastPing = time.time()
 
   def SendSec(self):
