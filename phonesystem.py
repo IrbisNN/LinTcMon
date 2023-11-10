@@ -48,7 +48,7 @@ class PhoneSystem:
     self.startup(self.hostname)
 
   def startup(self, hostname):
-    print("Connect ot ATS")
+    print("Connect to ATS")
     self.connect.connect_ex(hostname)
     self.connect.setblocking(False)
     #self.connect.send(b'B')
@@ -69,13 +69,13 @@ class PhoneSystem:
       self.reconnectATS()
 
   def reconnectATS(self):
-    print("Reconnect ot ATS")
+    print("Reconnect to ATS")
     try:
       self.connect.shutdown(socket.SHUT_RDWR)
       self.connect.close()    
     except socket.error as e:
       print(e)
-    self.socopen = False    
+    self.socopen = False
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     #self.startup(self.hostname)
     self.lastPing = time.time()
@@ -186,8 +186,11 @@ class PhoneSystem:
     if self.outdebug:
       print(f"Out Hex:  {encode_hex(dat)[0]}")
       print(f"Out ASN1: {mess}")
-    self.connect.send(bytes('\0' + chr(len(dat)), encoding='utf-8'))
-    self.connect.send(dat)
+    try:  
+      self.connect.send(bytes('\0' + chr(len(dat)), encoding='utf-8'))
+      self.connect.send(dat)
+    except socket.error as e:
+        self.socopen = False
 
   def NextID(self):
     if self.id == 32767:
