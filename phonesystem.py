@@ -817,7 +817,7 @@ class PhoneSystem:
 
   def changeState(self, number, status=0):
     if self.eventdebug:
-      self.logdebug(number, status)
+      self.logdebug(f"{number} - {status}")
     if int(number) in self.numbers.values(): 
       if status == 1 and str(number) not in self.avtiveNumbers:
         self.avtiveNumbers.append(str(number))
