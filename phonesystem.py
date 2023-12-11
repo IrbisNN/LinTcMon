@@ -828,7 +828,7 @@ class PhoneSystem:
 
   def addState(self, number, status=0):
     if self.eventdebug:
-      self.logdebug(number, status)
+      self.logdebug(f"{number} - {status}")
   
     query = f"""DO $do$ BEGIN CASE WHEN EXISTS (SELECT * FROM "BusyCalls" WHERE extension = '{self.numberPref}{number}' )
                 THEN
