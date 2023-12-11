@@ -7,6 +7,8 @@ import codecs
 from datetime import datetime
 import os
 import psycopg2
+import logging
+import logging.handlers
 
 encode_hex = codecs.getencoder("hex_codec")
 decode_hex = codecs.getdecoder("hex_codec")
@@ -37,8 +39,17 @@ class PhoneSystem:
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
   socopen = False
+  my_logger = None
 
   def __init__(self, host=('', 33333), dbparametrs=None, debug=0):
+    LOG_FILENAME = "out.log"
+    self.my_logger = logging.getLogger('EventLogger')
+    self.my_logger.setLevel(logging.DEBUG)
+    handler = logging.handlers.RotatingFileHandler(LOG_FILENAME, maxBytes=104857600, backupCount=3)
+    df = logging.Formatter('$asctime ${levelname} $message', style='$')
+    handler.setFormatter(df)
+    self.my_logger.addHandler(handler)
+
     self.indebug = debug
     self.eventdebug = debug
     self.dbparam = dbparametrs
@@ -48,7 +59,7 @@ class PhoneSystem:
     self.startup(self.hostname)
 
   def startup(self, hostname):
-    print("Connect to ATS")
+    self.logdebug("Connect to ATS")
     self.connect.connect_ex(hostname)
     self.connect.setblocking(False)
     #self.connect.send(b'B')
@@ -69,12 +80,12 @@ class PhoneSystem:
       self.reconnectATS()
 
   def reconnectATS(self):
-    print("Reconnect to ATS")
+    self.logdebug("Reconnect to ATS")
     try:
       self.connect.shutdown(socket.SHUT_RDWR)
       self.connect.close()    
     except socket.error as e:
-      print(e)
+      self.logerror(e)
     self.CDRStarted = False  
     self.socopen = False
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
@@ -93,8 +104,8 @@ class PhoneSystem:
   def send_direct_mess(self, mess=None):
     mess_hex = decode_hex(mess)[0]
     if self.outdebug:
-      print(f"Out Hex:  {encode_hex(mess_hex)[0]}")
-      print(f"Out ASN1: {mess}")
+      self.logdebug(f"Out Hex:  {encode_hex(mess_hex)[0]}")
+      self.logdebug(f"Out ASN1: {mess}")
     self.connect.send(bytes('\0' + chr(len(mess_hex)), encoding='utf-8'))
     self.connect.send(mess_hex)
 
@@ -185,8 +196,8 @@ class PhoneSystem:
   def sendMess(self,mess):
     dat = encoder.encode(mess)
     if self.outdebug:
-      print(f"Out Hex:  {encode_hex(dat)[0]}")
-      print(f"Out ASN1: {mess}")
+      self.logdebug(f"Out Hex:  {encode_hex(dat)[0]}")
+      self.logdebug(f"Out ASN1: {mess}")
     try:  
       self.connect.send(bytes('\0' + chr(len(dat)), encoding='utf-8'))
       self.connect.send(dat)
@@ -243,18 +254,18 @@ class PhoneSystem:
         self.SendSec()
       else:
         if self.indebug:
-          print(f"In  Hex:  {encode_hex(data)[0]}")
+          self.logdebug(f"In  Hex:  {encode_hex(data)[0]}")
 
         if isinstance(data, list):
           data = data[0]
 
         data = data[2:]
         if self.indebug:
-          print(f"In  Hex without 2 oct:  {encode_hex(data)[0]}")
+          self.logdebug(f"In  Hex without 2 oct:  {encode_hex(data)[0]}")
         if encode_hex(data)[0] == b'800100':
           self.reconnectATS()
         elif encode_hex(data)[0] == b'612f80020780a10706052b0c00815aa203020100a305a103020101be14281206072b0c00821d8148a007a0050303000800':
-          print(f"In  ASN1: {data}")
+          self.logdebug(f"In  ASN1: {data}")
         elif encode_hex(data)[0] == b'a10c020101020200d330030a0102':
           #self.handleAARE(data)
           #self.send_direct_mess(b'A20B0201013006020200D30500')
@@ -263,15 +274,15 @@ class PhoneSystem:
           try:
             decode = decoder.decode(data,asn1Spec=Rose())[0]
           except Exception as ex:
-            print(f"Error reading In Hex without 2 oct: {encode_hex(data)[0]}")
+            self.logerror(f"Error reading In Hex without 2 oct: {encode_hex(data)[0]}")
             return
           if self.indebug:
-            print(f"In  ASN1: {decode}")
+            self.logdebug(f"In  ASN1: {decode}")
           #if data[0] == 0:
           #  data = data[2:]
           #decode = decoder.decode(data,asn1Spec=Rose())[0]
           #if self.indebug:
-          #  print(f"In  ASN1: {decode}")
+          #  self.logdebug(f"In  ASN1: {decode}")
           Obj = decode.getComponent()
           if Obj.isSameTypeWith(AARE_apdu()):
             self.handleAARE(data)
@@ -280,13 +291,13 @@ class PhoneSystem:
           if Obj.isSameTypeWith(Invoke()):
             self.handleInvoke(Obj.getComponentByName('opcode'),data)
         else:
-          print(f"In  ASN1: {data}")
+          self.logdebug(f"In  ASN1: {data}")
 
 
   def handleAARE(self,data):
     self.initialized = True
     #decode = decoder.decode(data,asn1Spec=Rose())[0]
-    #print(f"In  ASN1: {decode}")
+    #self.logdebug(f"In  ASN1: {decode}")
     self.send_direct_mess(b'A11602020602020133300DA40BA009A407A105A0030A0105')
     self.send_direct_mess(b'A116020200E0020133300DA40BA009A407A105A0030A0102')
     #self.StartUpMonitors(settings.localext)
@@ -300,7 +311,7 @@ class PhoneSystem:
     ar = Obj.getComponentByName("args")
     ar = ar.getComponentByName("ResultSeq")
     #if(ar.getComponentByPosition(0) not in settings.handledopcodes):
-    #  print(f"In ASN1: {decode}")
+    #  self.logdebug(f"In ASN1: {decode}")
 
   def handleInvoke(self,opcode,data):
     if(opcode == 21):
@@ -347,7 +358,7 @@ class PhoneSystem:
     else:
      decode = decoder.decode(data,asn1Spec=Rose(opcode))[0]
      Obj = decode.getComponent()
-     print(f"In ASN1: {decode}")
+     self.logdebug(f"In ASN1: {decode}")
 
   def getNumber(self, component):
     deviceIdentifier = component.getComponentByName("deviceIdentifier")
@@ -384,8 +395,8 @@ class PhoneSystem:
   
   def updateCalls(self, cc, event, refID):
     if self.eventdebug:
-      print(event)
-      print(refID)
+      self.logdebug(event)
+      self.logdebug(refID)
     callID = ""
     callingNumber = ""
     calledNumber = ""
@@ -400,110 +411,116 @@ class PhoneSystem:
     transferredToNumber = ""
     alertingNumber = ""
     if event == 'Originated':
-      #print(cc)
+      if self.eventdebug:
+        self.logdebug(cc)
       originatedConnection = cc.getComponentByName("originatedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
       if self.eventdebug:
-        print(callID)
+        self.logdebug(callID)
       callingDevice = cc.getComponentByName("callingDevice")
       callingNumber = self.getNumber(callingDevice)
       if self.eventdebug:
-        print(callingNumber)
+        self.logdebug(callingNumber)
       calledDevice = cc.getComponentByName("calledDevice")
       calledNumber = self.getNumber(calledDevice)
       if self.eventdebug:
-        print(calledNumber)
+        self.logdebug(calledNumber)
       associatedCalledDevice = cc.getComponentByName("associatedCalledDevice")
       associatedCalledNumber = self.getNumber(associatedCalledDevice)
       if associatedCalledNumber and self.eventdebug:
-        print(associatedCalledNumber)
+        self.logdebug(associatedCalledNumber)
       associatedCallingDevice = cc.getComponentByName("associatedCallingDevice")
       associatedCallingNumber = self.getNumber(associatedCallingDevice)
       if associatedCallingNumber and self.eventdebug:
-        print(associatedCallingNumber)
+        self.logdebug(associatedCallingNumber)
     elif event == 'Established':
-      #print(cc)
+      if self.eventdebug:
+        self.logdebug(cc)
       originatedConnection = cc.getComponentByName("establishedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
       if self.eventdebug:
-        print(callID)
+        self.logdebug(callID)
       callingDevice = cc.getComponentByName("callingDevice")
       callingNumber = self.getNumber(callingDevice)
       if self.eventdebug:
-        print(callingNumber)
+        self.logdebug(callingNumber)
       calledDevice = cc.getComponentByName("calledDevice")
       calledNumber = self.getNumber(calledDevice)
       if self.eventdebug:
-        print(calledNumber)
+        self.logdebug(calledNumber)
       answeringDevice = cc.getComponentByName("answeringDevice")
       answeringNumber = self.getNumber(answeringDevice)
       if self.eventdebug:
-        print(answeringNumber)
+        self.logdebug(answeringNumber)
       if answeringNumber and answeringNumber != calledNumber:
         calledNumber = answeringNumber
       associatedCalledDevice = cc.getComponentByName("associatedCalledDevice")
       associatedCalledNumber = self.getNumber(associatedCalledDevice)
       if associatedCalledNumber and self.eventdebug:
-        print(associatedCalledNumber)
+        self.logdebug(associatedCalledNumber)
       associatedCallingDevice = cc.getComponentByName("associatedCallingDevice")
       associatedCallingNumber = self.getNumber(associatedCallingDevice)
       if associatedCallingNumber and self.eventdebug:
-        print(associatedCallingNumber)
+        self.logdebug(associatedCallingNumber)
     elif event == 'Failed':  
-      #print(cc)
+      if self.eventdebug:
+        self.logdebug(cc)
       cause = cc.getComponentByName("cause")
       #if int(cause) in self.failedCauses:
       failedConnection = cc.getComponentByName("failedConnection")
       both = failedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
       if self.eventdebug:
-        print(callID)
+        self.logdebug(callID)
       callingDevice = cc.getComponentByName("callingDevice")
       callingNumber = self.getNumber(callingDevice)
       if self.eventdebug:
-        print(callingNumber)
+        self.logdebug(callingNumber)
       calledDevice = cc.getComponentByName("calledDevice")
       calledNumber = self.getNumber(calledDevice)
       if self.eventdebug:
-        print(calledNumber)
+        self.logdebug(calledNumber)
       associatedCalledDevice = cc.getComponentByName("associatedCalledDevice")
       associatedCalledNumber = self.getNumber(associatedCalledDevice)
       if associatedCalledNumber and self.eventdebug:
-        print(associatedCalledNumber)
+        self.logdebug(associatedCalledNumber)
       associatedCallingDevice = cc.getComponentByName("associatedCallingDevice")
       associatedCallingNumber = self.getNumber(associatedCallingDevice)
       if associatedCallingNumber and self.eventdebug:
-        print(associatedCallingNumber)
+        self.logdebug(associatedCallingNumber)
     elif event == 'ConnectionCleared':  
-      #print(cc)
+      if self.eventdebug:
+        self.logdebug(cc)
       originatedConnection = cc.getComponentByName("droppedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
       if self.eventdebug:
-        print(callID)
+        self.logdebug(callID)
       releasingDevice = cc.getComponentByName("releasingDevice")
       releasingNumber = self.getNumber(releasingDevice)
       if self.eventdebug:
-        print(releasingNumber)
+        self.logdebug(releasingNumber)
     elif event == 'ServiceInitiated':  
-      #print(cc)
+      if self.eventdebug:
+        self.logdebug(cc)
       originatedConnection = cc.getComponentByName("initiatedConnection")
       both = originatedConnection.getComponentByName("both")
       callID = both.getComponentByName("callID")
       if self.eventdebug:
-        print(callID)
+        self.logdebug(callID)
       initiatingDevice = cc.getComponentByName("initiatingDevice")
       initiatingNumber = self.getNumber(initiatingDevice)
       if self.eventdebug:
-        print(initiatingNumber)
+        self.logdebug(initiatingNumber)
       networkCalledDevice = cc.getComponentByName("networkCalledDevice")
       networkCalledNumber = self.getNumber(networkCalledDevice)
       if self.eventdebug:
-        print(networkCalledNumber)
+        self.logdebug(networkCalledNumber)
     elif event == 'Transferred':
-      #print(cc)  
+      if self.eventdebug:
+        self.logdebug(cc)  
       primaryOldCall = cc.getComponentByName("primaryOldCall")
       both = primaryOldCall.getComponentByName("both")
       primaryCallID = both.getComponentByName("callID")
@@ -517,12 +534,12 @@ class PhoneSystem:
       transferringDevice = cc.getComponentByName("transferringDevice")
       transferringNumber = self.getNumber(transferringDevice)
       if self.eventdebug:
-        print(transferringNumber)
+        self.logdebug(transferringNumber)
 
       transferredToDevice = cc.getComponentByName("transferredToDevice")
       transferredToNumber = self.getNumber(transferredToDevice)
       if self.eventdebug:
-        print(transferredToNumber)
+        self.logdebug(transferredToNumber)
       calledNumber = transferredToNumber
 
       transferredConnections = cc.getComponentByName("transferredConnections")
@@ -531,23 +548,24 @@ class PhoneSystem:
         both = newConnection.getComponentByName("both")
         callID = both.getComponentByName("callID")
         if self.eventdebug:
-          print(callID)
+          self.logdebug(callID)
         transferredNumber = self.getNumberDeviceID(both)
         if self.eventdebug:
-          print(transferredNumber)
+          self.logdebug(transferredNumber)
         if str(transferredNumber) != str(transferredToNumber):
           callingNumber = transferredNumber
     elif event == 'Delivered':
-      #print(cc)
+      if self.eventdebug:
+        self.logdebug(cc)
       connection = cc.getComponentByName("connection")
       both = connection.getComponentByName("both")
       callID = both.getComponentByName("callID")
       if self.eventdebug:
-        print(callID)
+        self.logdebug(callID)
       alertingDevice = cc.getComponentByName("alertingDevice")
       alertingNumber = self.getNumber(alertingDevice)
       if self.eventdebug:
-        print(alertingNumber)
+        self.logdebug(alertingNumber)
  
     if bool(callID) and bool(callingNumber) and bool(calledNumber):
       self.addToDB(event=event,
@@ -615,7 +633,7 @@ class PhoneSystem:
     conditionCode = ""
 
     dec = decoder.decode(data,asn1Spec=Rose())[0]
-    #print(f"In ASN1: {dec}")
+    #self.logdebug(f"In ASN1: {dec}")
     Obj = dec.getComponent()
     args = Obj.getComponentByName("args").getComponentByName("ArgSeq")
     for i in args:
@@ -666,7 +684,7 @@ class PhoneSystem:
   def handleEvent(self, data):
     dec = decoder.decode(data,asn1Spec=Rose())[0] # dec = decoder.decode(data,asn1Spec=Rose(21))[0]
     Obj = dec.getComponent()
-    # print(f"In ASN1: {dec}")
+    # self.logdebug(f"In ASN1: {dec}")
     args = Obj.getComponentByName("args").getComponentByName("ArgSeq")
     refID = b''
     event = ''
@@ -705,7 +723,7 @@ class PhoneSystem:
           elif cc.isSameTypeWith(TransferredEvent()):
             event = 'Transferred'
         except Exception as ex:
-          print(ex)
+          self.logerror(ex)
         #if i.isSameTypeWith(EventTypeID()):
         #  typeid = i.getComponentByName("cSTAform")
         #if i.isSameTypeWith(EventInfo()):
@@ -799,7 +817,7 @@ class PhoneSystem:
 
   def changeState(self, number, status=0):
     if self.eventdebug:
-      print(number, status)
+      self.logdebug(number, status)
     if int(number) in self.numbers.values(): 
       if status == 1 and str(number) not in self.avtiveNumbers:
         self.avtiveNumbers.append(str(number))
@@ -810,7 +828,7 @@ class PhoneSystem:
 
   def addState(self, number, status=0):
     if self.eventdebug:
-      print(number, status)
+      self.logdebug(number, status)
   
     query = f"""DO $do$ BEGIN CASE WHEN EXISTS (SELECT * FROM "BusyCalls" WHERE extension = '{self.numberPref}{number}' )
                 THEN
@@ -856,7 +874,7 @@ class PhoneSystem:
             cur.execute(query)
       except (psycopg2.DatabaseError, psycopg2.OperationalError) as error:
         time.sleep(5)
-        print("Reconnect ot DB")
+        self.logdebug("Reconnect ot DB")
         self.connectdb()
 
   def connectdb(self):
@@ -867,10 +885,20 @@ class PhoneSystem:
         if self.mydb:
           cur = self.mydb.cursor()
           cur.execute("commit;")
-          print("DB Connected")
+          self.logdebug("DB Connected")
       except psycopg2.OperationalError as error:
         time.sleep(5)
-        print("Reconnect ot DB")
+        self.logdebug("Reconnect ot DB")
         self.connectdb()
       except (Exception, psycopg2.Error) as error:
           raise error
+      
+  def logdebug(self, msg):
+    self.my_logger.debug(msg)
+    if self.outdebug:
+      print(msg)
+
+  def logerror(self, msg):
+    self.my_logger.error(msg)
+    if self.outdebug:
+      print(msg)
