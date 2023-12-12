@@ -216,23 +216,32 @@ class PhoneSystem:
     try:
       data = self.connect.recv(1)
       if not data:
-        return ""
+        return None
+      if self.indebug:
+        self.logdebug(f"First oct:  {data}")
       full = [data]
       data = self.connect.recv(1)
       if not data:
-        return ""
+        return None
+      if self.indebug:
+        self.logdebug(f"Second oct:  {data}")
       full.append(data)
       length = ord(data)
       got = 0
       fulllength = int(encode_hex(b''.join(full))[0], base=16)
+      if self.indebug:
+        self.logdebug(f"Lenght:  {fulllength}")
       while length>got:
         data = self.connect.recv(fulllength)
         if not data:
-          return ""
+          return None
         full.append(data)
         got = got + len(data)
+      if self.indebug:
+        self.logdebug(f"In mess:  {full}")
       return b''.join(full)
     except socket.error as e:
+      self.logerror(f"Error reading message: {data}")
       return full
 
   def startCDR(self):
