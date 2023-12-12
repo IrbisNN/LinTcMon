@@ -253,11 +253,11 @@ class PhoneSystem:
       if data == "P":
         self.SendSec()
       else:
-        if self.indebug:
-          self.logdebug(f"In  Hex:  {encode_hex(data)[0]}")
-
         if isinstance(data, list):
           data = data[0]
+
+        if self.indebug:
+          self.logdebug(f"In  Hex:  {encode_hex(data)[0]}")
 
         data = data[2:]
         if self.indebug:
