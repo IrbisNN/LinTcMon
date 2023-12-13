@@ -38,6 +38,7 @@ class PhoneSystem:
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
+  MonitorStarted = False
   socopen = False
   my_logger = None
 
@@ -86,7 +87,8 @@ class PhoneSystem:
       self.connect.close()    
     except socket.error as e:
       self.logerror(e)
-    self.CDRStarted = False  
+    self.CDRStarted = False
+    self.MonitorStarted = False
     self.socopen = False
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     #self.startup(self.hostname)
@@ -231,15 +233,16 @@ class PhoneSystem:
       fulllength = int(encode_hex(b''.join(full))[0], base=16)
       if self.indebug:
         self.logdebug(f"Lenght:  {fulllength}")
-      while length>got:
+      while fulllength>0:
         try:
           data = self.connect.recv(fulllength)
           if not data:
             return None
           full.append(data)
-          got = got + len(data)
+          got += len(data)
+          fulllength -= len(data)
         except socket.error as e:
-          self.logerror(f"Error reciving message: {e}")
+          self.logerror(f"Error receiving message: {e}")    
       if self.indebug:
         self.logdebug(f"In mess:  {full}")
       return b''.join(full)
@@ -365,6 +368,9 @@ class PhoneSystem:
         self.StartMonitorDeviceNumber(int(numberID))
         if len(str(number)) == 4:
           self.addState(str(number))
+        if ls == True:
+          self.MonitorStarted = True
+          self.logdebug("Monitor started")
     elif(opcode == 361):
       self.handleCDR(data)
     else:
