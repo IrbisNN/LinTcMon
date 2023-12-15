@@ -34,7 +34,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-11-11_LinTcMon"
+  version = "2023-12-15_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
@@ -53,6 +53,7 @@ class PhoneSystem:
 
     self.indebug = debug
     self.eventdebug = debug
+    self.outdebug = debug
     self.dbparam = dbparametrs
     self.connectdb()
     self.hostname = host
@@ -126,6 +127,8 @@ class PhoneSystem:
     o['args']['callingDevice'] = devCalling
     o['args']['calledDirectoryNumber'] = devCalled
     self.sendMess(o)
+    if self.outdebug:
+      self.logdebug(f"Make call: {calling} - {called}")
   
   def chekMakeCall(self):
     if self.initialized == False:
