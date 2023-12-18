@@ -34,7 +34,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-12-15_LinTcMon"
+  version = "2023-12-18_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
@@ -76,13 +76,14 @@ class PhoneSystem:
   def resetTimeout(self):
     self.last = time.time()
     datediff = time.time() - self.lastPing
-    if datediff > 1*60 and self.CDRStarted == False:
+    if datediff > 1*60 and self.socopen and self.CDRStarted == False:
       self.startCDR()
     elif datediff > 5*60:
       self.reconnectATS()
 
   def reconnectATS(self):
     self.logdebug("Reconnect to ATS")
+    self.lastPing = time.time()
     try:
       self.connect.shutdown(socket.SHUT_RDWR)
       self.connect.close()    
@@ -93,7 +94,6 @@ class PhoneSystem:
     self.socopen = False
     self.connect = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     #self.startup(self.hostname)
-    self.lastPing = time.time()
 
   def SendSec(self):
     app = ApplicationContextName().subtype(implicitTag=tag.Tag(tag.tagClassContext,tag.tagFormatConstructed,1))
@@ -126,9 +126,9 @@ class PhoneSystem:
     devCalled.setComponentByName('deviceIdentifier', deviceIdentifierCalled)
     o['args']['callingDevice'] = devCalling
     o['args']['calledDirectoryNumber'] = devCalled
-    self.sendMess(o)
-    if self.outdebug:
-      self.logdebug(f"Make call: {calling} - {called}")
+    result = self.sendMess(o)
+    self.logdebug(f"Make call: {calling} - {called} - {result}")
+    return result
   
   def chekMakeCall(self):
     if self.initialized == False:
@@ -147,8 +147,9 @@ class PhoneSystem:
               ExtNumber = self.prefMakeCalls + ExtNumber
             else:
               ExtNumber = self.prefMakeCalls + "8" + ExtNumber
+            result = False  
             if len(IntNumber) == 4 and len(ExtNumber) > 6:
-              self.MakeCall(IntNumber, ExtNumber);
+              result = self.MakeCall(IntNumber, ExtNumber);
             query = f"""UPDATE "MakeCalls" SET Done = true WHERE ID = {call[0]}"""
             cur.execute(query)
 
@@ -206,8 +207,11 @@ class PhoneSystem:
     try:  
       self.connect.send(bytes('\0' + chr(len(dat)), encoding='utf-8'))
       self.connect.send(dat)
+      return True
     except socket.error as e:
-        self.socopen = False
+      self.logerror(f"Error sending mes: {mess} - {e}")
+      #self.socopen = False
+      return False
 
   def NextID(self):
     if self.id == 32767:
@@ -273,9 +277,6 @@ class PhoneSystem:
       else:
         if isinstance(data, list):
           data = data[0]
-
-        if self.indebug:
-          self.logdebug(f"In  Hex:  {encode_hex(data)[0]}")
 
         data = data[2:]
         if self.indebug:
@@ -371,9 +372,9 @@ class PhoneSystem:
         self.StartMonitorDeviceNumber(int(numberID))
         if len(str(number)) == 4:
           self.addState(str(number))
-        if ls == True:
-          self.MonitorStarted = True
-          self.logdebug("Monitor started")
+      if ls == True:
+        self.MonitorStarted = True
+        self.logdebug("Monitor started")
     elif(opcode == 361):
       self.handleCDR(data)
     else:
@@ -913,13 +914,13 @@ class PhoneSystem:
         self.connectdb()
       except (Exception, psycopg2.Error) as error:
           raise error
-      
+
   def logdebug(self, msg):
     self.my_logger.debug(msg)
-    if self.outdebug:
+    if self.eventdebug:
       print(msg)
 
   def logerror(self, msg):
     self.my_logger.error(msg)
-    if self.outdebug:
+    if self.eventdebug:
       print(msg)
