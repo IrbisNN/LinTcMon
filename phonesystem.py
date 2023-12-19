@@ -34,7 +34,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-12-18_LinTcMon"
+  version = "2023-12-19_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
@@ -223,13 +223,25 @@ class PhoneSystem:
   def readmess(self):
     full = None
     try:
-      data = self.connect.recv(1)
+      firstoctlengh = 1
+      while firstoctlengh>0:
+        try:
+          data = self.connect.recv(1)
+          firstoctlengh -= len(data)
+        except socket.error as e:
+          self.logerror(f"Error receiving first oct: {e}")
       if not data:
         return None
       if self.indebug:
         self.logdebug(f"First oct:  {data}")
       full = [data]
-      data = self.connect.recv(1)
+      secondoctlengh = 1
+      while secondoctlengh>0:
+        try:
+          data = self.connect.recv(1)
+          secondoctlengh -= len(data)
+        except socket.error as e:
+          self.logerror(f"Error receiving second oct: {e}")
       if not data:
         return None
       if self.indebug:
