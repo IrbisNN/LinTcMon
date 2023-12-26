@@ -34,7 +34,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-12-19_LinTcMon"
+  version = "2023-12-26_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
@@ -76,7 +76,7 @@ class PhoneSystem:
   def resetTimeout(self):
     self.last = time.time()
     datediff = time.time() - self.lastPing
-    if datediff > 1*60 and self.socopen and self.CDRStarted == False:
+    if datediff > 1*60 and self.initialized and self.CDRStarted == False:
       self.startCDR()
     elif datediff > 5*60:
       self.reconnectATS()
@@ -223,51 +223,44 @@ class PhoneSystem:
   def readmess(self):
     full = None
     try:
-      firstoctlengh = 1
-      while firstoctlengh>0:
-        try:
-          data = self.connect.recv(1)
-          firstoctlengh -= len(data)
-        except socket.error as e:
-          self.logerror(f"Error receiving first oct: {e}")
+      data = self.receivdata(1)
       if not data:
         return None
       if self.indebug:
         self.logdebug(f"First oct:  {data}")
       full = [data]
-      secondoctlengh = 1
-      while secondoctlengh>0:
-        try:
-          data = self.connect.recv(1)
-          secondoctlengh -= len(data)
-        except socket.error as e:
-          self.logerror(f"Error receiving second oct: {e}")
+      data = self.receivdata(1)
       if not data:
         return None
       if self.indebug:
         self.logdebug(f"Second oct:  {data}")
       full.append(data)
-      length = ord(data)
-      got = 0
+      #length = ord(data)
       fulllength = int(encode_hex(b''.join(full))[0], base=16)
       if self.indebug:
         self.logdebug(f"Lenght:  {fulllength}")
-      while fulllength>0:
-        try:
-          data = self.connect.recv(fulllength)
-          if not data:
-            return None
-          full.append(data)
-          got += len(data)
-          fulllength -= len(data)
-        except socket.error as e:
-          self.logerror(f"Error receiving message: {e}")    
+      data = self.receivdata(fulllength)  
+      if not data:
+        return None
+      full.append(data)
       if self.indebug:
         self.logdebug(f"In mess:  {full}")
       return b''.join(full)
     except socket.error as e:
       self.logerror(f"Error reading message: {data} - {e}")
       return full
+
+  def receivdata(self, lenght):
+    data = None
+    while lenght > 0:
+      try:
+        data = self.connect.recv(lenght)
+        lenght -= len(data)
+      except socket.error as e:
+        self.logerror(f"Error receiving message Lenght: {lenght} Error: {e}")
+        if e.args[0] != 11:
+          return None
+    return data
 
   def startCDR(self):
     if self.CDRStarted == True:
