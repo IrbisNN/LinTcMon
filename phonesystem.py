@@ -210,7 +210,8 @@ class PhoneSystem:
       return True
     except socket.error as e:
       self.logerror(f"Error sending mes: {mess} - {e}")
-      #self.socopen = False
+      if e.args[0] == 32:
+        self.reconnectATS()
       return False
 
   def NextID(self):
@@ -258,7 +259,9 @@ class PhoneSystem:
         lenght -= len(data)
       except socket.error as e:
         self.logerror(f"Error receiving message Lenght: {lenght} Error: {e}")
-        if e.args[0] != 11:
+        if e.args[0] == 32:
+          self.reconnectATS()
+        elif e.args[0] != 11:
           return None
     return data
 
