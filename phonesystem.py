@@ -34,7 +34,7 @@ class PhoneSystem:
   initialized = False
   lastPing = time.time()
   prefMakeCalls = ""
-  version = "2023-12-26_LinTcMon"
+  version = "2024-05-21_LinTcMon"
   server = os.uname()[1]
   CDRConditionCode = {0:"Reverse Charging",1:"Call Transfer",2:"Call Forwarding",3:"DISA/TIE",4:"Remote Maintenance",5:"No Answer"}
   CDRStarted = False
@@ -520,6 +520,10 @@ class PhoneSystem:
       associatedCallingNumber = self.getNumber(associatedCallingDevice)
       if associatedCallingNumber and self.eventdebug:
         self.logdebug(associatedCallingNumber)
+      networkCalledDevice = cc.getComponentByName("networkCalledDevice")
+      networkCalledNumber = self.getNumber(networkCalledDevice)
+      if networkCalledNumber and self.eventdebug:
+          self.logdebug(networkCalledNumber)
     elif event == 'ConnectionCleared':  
       if self.eventdebug:
         self.logdebug(cc)
@@ -627,7 +631,7 @@ class PhoneSystem:
     if bool(callID) and bool(initiatingNumber) and len(str(initiatingNumber)) == 4:
       self.changeState(initiatingNumber, 1)
 
-    if bool(callID) and bool(networkCalledNumber) and len(str(networkCalledNumber)) == 4:
+    if event != 'Failed' and bool(callID) and bool(networkCalledNumber) and len(str(networkCalledNumber)) == 4:
       self.changeState(networkCalledNumber, 1)
 
     if bool(callID) and bool(alertingNumber) and len(str(alertingNumber)) == 4:
@@ -638,6 +642,8 @@ class PhoneSystem:
         self.changeState(callingNumber, 0)
       if bool(calledNumber) and len(str(calledNumber)) == 4:
         self.changeState(calledNumber, 0)
+      if networkCalledNumber and len(str(networkCalledNumber)) == 4:
+        self.changeState(networkCalledNumber, 0)
 
   def handleCDR(self, data):
     result = ReturnResult()
